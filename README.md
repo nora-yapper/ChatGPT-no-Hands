@@ -83,8 +83,6 @@ the tab strip in the header:
   the bottom, so the bottom part never moves whatever is shown above it (heading, transcript, expanded prompt). Turn on
   EXPERIMENT MODE in the lab header to see the base grid lines under the chat. The navigator gained explicit `cells` for this (`layoutFromRects`); the lab's equal grid is the
   same mechanism with uniform cells.
-- **Keyboard Chat** (`/chat/keyboard`): the first hands-free chat design — a permanent head-controlled keyboard
-  with suggestion chips under a ChatGPT-style composer — kept for comparison with the spatial interface.
 
 ## Run
 

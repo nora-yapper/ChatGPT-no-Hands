@@ -213,3 +213,18 @@ describe("GridNavigator (pull / stickiness tuning)", () => {
     expect(afterHigh.cell).toEqual({ row: 1, col: 5 }); // k5 holds on
   });
 });
+
+describe("GridNavigator motionScale", () => {
+  it("scales relative head motion per axis, so a bigger area keeps the same pixel speed", () => {
+    const turn = (t: number): [number, number] => [Math.min(0.3, (t / 300) * 0.3), 0]; // yaw 0 → 0.3 over 300 ms
+    const plain = new GridNavigator();
+    plain.setLayout(layout);
+    run(plain, turn, 0, 400);
+    const scaled = new GridNavigator();
+    scaled.setLayout({ ...layout, motionScale: { x: 0.5, y: 1 } });
+    run(scaled, turn, 0, 400);
+    const travelled = (g: GridNavigator) => g.getStatus(400, REL).cursorX - 0.5;
+    expect(travelled(plain)).toBeGreaterThan(0.1);
+    expect(travelled(scaled)).toBeCloseTo(travelled(plain) / 2, 5);
+  });
+});

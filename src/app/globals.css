@@ -149,18 +149,6 @@ input[type="range"] {
   --chat-fill-neutral: #6b6b6b; /* lighter than the dark control surfaces (#2f2f2f / #424242) for contrast */
 }
 
-/* pins a subtree's tokens to the light values regardless of an ancestor .dark chat-root, so a card that
-   must always read as a white sheet (e.g. a project card) stays legible instead of going dark-on-dark */
-.card-force-light {
-  --background: #ffffff;
-  --foreground: #0d0d0d;
-  --muted: #f4f4f4;
-  --muted-foreground: #5d5d5d;
-  --border: #e5e5e5;
-  color: var(--foreground);
-  color-scheme: light;
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -219,9 +207,10 @@ input[type="range"] {
   --pastel-fill-8: oklch(0.83 0.13 330);
   --pastel-fill-9: oklch(0.82 0.1 355);
 
-  /* Send: no hue, so it progresses by value instead — dark gray at rest, filling to black as it arms */
-  --send-bg: #5d5d5d;
-  --send-fill: #0d0d0d;
+  /* solid (primary) controls — Send, Reply, Add, Save: no hue, so they progress by value instead — dark gray
+     at rest, filling to black as they arm (see the focusable-surface rules below) */
+  --solid-bg: #5d5d5d;
+  --solid-fill: #0d0d0d;
 }
 .chat-root.dark {
   --pastel-0: oklch(0.34 0.05 20);
@@ -248,9 +237,9 @@ input[type="range"] {
   --pastel-fill-8: oklch(0.55 0.125 330);
   --pastel-fill-9: oklch(0.56 0.13 355);
 
-  /* Send is inverted (light) in dark mode: light gray at rest, filling to white as it arms */
-  --send-bg: #b4b4b4;
-  --send-fill: #ffffff;
+  /* solid controls are inverted (light) in dark mode: light gray at rest, filling to white as they arm */
+  --solid-bg: #b4b4b4;
+  --solid-fill: #ffffff;
 }
 /* a pastel field: tint from --tint, deepened slightly on hover */
 .pastel {
@@ -261,10 +250,23 @@ input[type="range"] {
 .pastel:hover {
   background-color: color-mix(in oklch, var(--tint), var(--pastel-ink) 6%);
 }
-/* the Send control: its own gray→black fill instead of the opaque primary button (see NoHandsScreen) */
-.send-control {
-  background-color: var(--send-bg);
-  --fill: var(--send-fill);
+/* Focusable surfaces. ChatFocusable paints its dwell/armed fill *under* its content, so a button with an opaque
+   background would hide it — focused and armed would look the same as at rest. Inside a live focusable, a solid
+   button hands its surface to the wrapper and goes transparent itself, so the fill rises between surface and
+   label. (Unlayered, so these beat the button's own bg/hover utilities.) */
+.chat-root [data-target]:has(> div > [data-slot="button"][data-variant="default"]) {
+  background-color: var(--solid-bg);
+  --fill: var(--solid-fill);
+}
+.chat-root [data-target]:has(> div > [data-slot="button"][data-variant="secondary"]) {
+  background-color: var(--secondary);
+}
+.chat-root:not(.dark) [data-target]:has(> div > [data-slot="button"][data-variant="outline"]) {
+  background-color: var(--background);
+}
+.chat-root [data-target] > div > [data-slot="button"]:is([data-variant="default"], [data-variant="secondary"]),
+.chat-root:not(.dark) [data-target] > div > [data-slot="button"][data-variant="outline"] {
+  background-color: transparent;
 }
 /* the single confirm pulse (see ChatFocusable): a brief pop, once, never a repeating/decorative animation */
 @keyframes chat-confirm-pulse {

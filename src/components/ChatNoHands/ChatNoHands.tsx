@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { Camera, CameraOff, ChevronDown, Crosshair, FlaskConical, Keyboard, MessageSquare, Moon, PanelLeft, Settings2, Sun, VenetianMask } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Camera, CameraOff, Crosshair, VenetianMask } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { Badge } from "@/components/shadcn/badge";
 import { Separator } from "@/components/shadcn/separator";
@@ -21,6 +21,8 @@ import { fallbackPredictions, type Predictions } from "@/chat/predictionRules";
 import { buildPrompt, pushSegment, undoSegment, type Segment } from "@/chat/promptState";
 import { cn } from "@/lib/utils";
 import { NoHandsScreen } from "./NoHandsScreen";
+import { SidebarCloseButton, SidebarInterfaces, SidebarOpenButton, SidebarToggles, sidebarAction } from "./SidebarControls";
+import { TransitIndicator } from "./TransitIndicator";
 import { KeyboardModal } from "./KeyboardModal";
 import { RenameKeyboardModal } from "./RenameKeyboardModal";
 import { useHeadScrollTarget } from "./useHeadScroll";
@@ -75,6 +77,9 @@ function IconButton({ label, onClick, children, active, disabled, className }: {
 
 export default function ChatNoHands() {
   const { videoRef, start, stop } = useCameraTracking();
+  const router = useRouter();
+  /** the head pointer's area: the whole window, so the cursor can glide into the sidebar */
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const lab = useLab();
   const settings = useSettings();
   const [theme, setTheme] = useState<Theme>(readTheme);
@@ -99,6 +104,8 @@ export default function ChatNoHands() {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   /** Recents: the chat/project being renamed via the on-screen keyboard, if any — also reused to edit an Account field */
   const [renameTarget, setRenameTarget] = useState<{ kind: RenameKind; id: string; value: string } | null>(null);
+  /** the main screen and sidebar own the head pointer unless a keyboard modal has taken it over */
+  const headEnabled = !keyboardOpen && !renameTarget;
   const renameRef = useRef(renameTarget);
   useEffect(() => { renameRef.current = renameTarget; }, [renameTarget]);
   // Account: a prototype identity, editable through the same on-screen keyboard as chat/project renaming
@@ -133,11 +140,13 @@ export default function ChatNoHands() {
     };
   }, []);
 
-  const toggleTheme = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    try { localStorage.setItem(THEME_KEY, next); } catch {}
-  };
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => {
+      const next: Theme = current === "dark" ? "light" : "dark";
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const el = transcriptRef.current;
@@ -360,10 +369,12 @@ export default function ChatNoHands() {
         case "ACCOUNT_EDIT_NAME": setRenameTarget({ kind: "account-name", id: "", value: accountName }); break;
         case "ACCOUNT_EDIT_EMAIL": setRenameTarget({ kind: "account-email", id: "", value: accountEmail }); break;
         case "LOG_OUT": break; // not part of this prototype
+        default:
+          sidebarAction(action, target, { setSidebarOpen, toggleTheme, toggleSettings: () => setSettingsOpen((o) => !o), navigate: (href) => router.push(href), newChat });
       }
       if (target) setLastFlash((f) => ({ ...f, [target.id]: timestamp }));
     },
-    [pick, undo, send, closeKeyboard, closeRename, newChat, accountName, accountEmail],
+    [pick, undo, send, closeKeyboard, closeRename, newChat, accountName, accountEmail, toggleTheme, router],
   );
 
   const handleAction = useCallback((a: ActionEvent) => act(a.target, a.action, a.timestamp), [act]);
@@ -413,25 +424,15 @@ export default function ChatNoHands() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className={cn("chat-root flex h-screen text-[15px]", theme === "dark" && "dark")}>
+      <div ref={rootRef} className={cn("chat-root relative flex h-screen text-[15px]", theme === "dark" && "dark")}>
+        {/* the head pointer's in-transit dot, over the whole window (the pointer's area); a modal draws its own */}
+        {headEnabled && <TransitIndicator />}
         {/* ── Sidebar ─────────────────────────────────────────── */}
         <aside className={cn("flex shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-[width] duration-200", sidebarOpen ? "w-[260px]" : "w-0 overflow-hidden")}>
-          <div className="flex h-14 items-center justify-between px-3">
-            <IconButton label="Close sidebar" onClick={() => setSidebarOpen(false)}><PanelLeft className="size-5" /></IconButton>
+          <div className="flex h-16 items-center px-3">
+            <SidebarCloseButton enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
           </div>
-
-          <nav className="flex flex-col gap-0.5 px-3">
-            <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">Interfaces</div>
-            <Link href="/" className="flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm hover:bg-accent">
-              <FlaskConical className="size-[18px]" /> Input Lab
-            </Link>
-            <button onClick={newChat} className="flex h-9 items-center gap-2.5 rounded-lg bg-accent px-2 text-left text-sm">
-              <MessageSquare className="size-[18px]" /> ChatGPT No Hands
-            </button>
-            <Link href="/chat/keyboard" className="flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm hover:bg-accent">
-              <Keyboard className="size-[18px]" /> Keyboard Chat
-            </Link>
-          </nav>
+          <SidebarInterfaces current="chat" enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
 
           <div className="flex-1" />
 
@@ -466,10 +467,7 @@ export default function ChatNoHands() {
               </div>
               {cameraProblem && <div className="mt-2 px-1 text-[11px] leading-snug text-destructive">{lab.camera.message}</div>}
             </div>
-            <div className="mt-1 flex items-center justify-between">
-              <IconButton label={theme === "dark" ? "Light mode" : "Dark mode"} onClick={toggleTheme}>{theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}</IconButton>
-              <IconButton label="Interaction settings" active={settingsOpen} onClick={() => setSettingsOpen((o) => !o)}><Settings2 className="size-5" /></IconButton>
-            </div>
+            <SidebarToggles theme={theme} settingsOpen={settingsOpen} enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
           </div>
         </aside>
 
@@ -477,11 +475,9 @@ export default function ChatNoHands() {
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <header className="flex h-14 shrink-0 items-center justify-between px-3">
             <div className="flex items-center gap-1">
-              {!sidebarOpen && <IconButton label="Open sidebar" onClick={() => setSidebarOpen(true)}><PanelLeft className="size-5" /></IconButton>}
-              <Button variant="ghost" className="h-9 gap-1 rounded-lg px-2.5 text-[18px] font-medium text-foreground hover:bg-accent">
-                ChatGPT <span className="font-normal text-muted-foreground">No Hands</span>
-                <ChevronDown className="size-4 text-muted-foreground" />
-              </Button>
+              {!sidebarOpen && <SidebarOpenButton enabled={headEnabled} lastFlash={lastFlash} onActivate={onActivate} />}
+              {/* ISNT — Ima Slike Nema Tona */}
+              <div className="px-2.5 text-[18px] font-medium text-foreground">ISNT</div>
             </div>
             <div className="flex items-center gap-2">
               {predictionSource === "fallback" && prompt && (
@@ -525,7 +521,9 @@ export default function ChatNoHands() {
             sending={sending}
             canUndo={segments.length > 0}
             expanded={expanded}
-            enabled={!keyboardOpen && !renameTarget}
+            enabled={headEnabled}
+            areaRef={rootRef}
+            areaKey={`${sidebarOpen}|${settingsOpen}|${theme}`}
             lastFlash={lastFlash}
             onActivate={onActivate}
             mode={hasTranscript && !composing ? "read" : "compose"}

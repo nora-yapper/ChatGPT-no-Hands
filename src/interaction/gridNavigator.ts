@@ -27,6 +27,12 @@ export interface GridLayout {
    * small value so that space really is empty.
    */
   snap?: number;
+  /**
+   * Relative-glide scale per axis (default 1). A layout whose area is larger than the part of the screen the
+   * glide speed was tuned for (e.g. the whole window, so the cursor can reach a sidebar) sets
+   * tuned-size / area-size here, so a given head movement still covers the same distance in pixels.
+   */
+  motionScale?: { x: number; y: number };
 }
 
 /** One glide field: a rectangle in 0..1 area coordinates and the target it holds (null = empty field). */
@@ -222,9 +228,11 @@ export class GridNavigator {
     }
 
     // ---- movement interpretation → cursor
+    const sx = this.layout.motionScale?.x ?? 1;
+    const sy = this.layout.motionScale?.y ?? 1;
     if (th.gridInput === "absolute") {
-      this.cx = clamp01(0.5 + s.headYaw * th.gridSensitivity * 0.5);
-      this.cy = clamp01(0.5 - s.headPitch * th.gridSensitivity * 0.5);
+      this.cx = clamp01(0.5 + s.headYaw * th.gridSensitivity * 0.5 * sx);
+      this.cy = clamp01(0.5 - s.headPitch * th.gridSensitivity * 0.5 * sy);
     } else if (this.prevHead) {
       const dt = Math.max(1, t - this.prevHead.t) / 1000;
       const dx = s.headYaw - this.prevHead.yaw;
@@ -234,8 +242,8 @@ export class GridNavigator {
         // remove the dead zone so motion starts smoothly at the threshold, then apply gain + acceleration
         const usable = (speed - th.gridDeadZone) / speed;
         const gain = th.gridSensitivity * (1 + th.gridAcceleration * speed);
-        this.cx = clamp01(this.cx + dx * usable * gain);
-        this.cy = clamp01(this.cy + dy * usable * gain);
+        this.cx = clamp01(this.cx + dx * usable * gain * sx);
+        this.cy = clamp01(this.cy + dy * usable * gain * sy);
       }
     }
     this.prevHead = { yaw: s.headYaw, pitch: s.headPitch, t };

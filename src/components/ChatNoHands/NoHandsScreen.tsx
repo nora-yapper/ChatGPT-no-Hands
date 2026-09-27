@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { ArrowUp, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, Clock, Keyboard, MessageSquare, MessagesSquare, SquarePen, Undo2, User } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
-import type { FocusTarget } from "@/types/interaction";
+import type { ActionEvent, FocusTarget } from "@/types/interaction";
+import { pipeline } from "@/pipeline/Pipeline";
 import type { Predictions } from "@/chat/predictionRules";
 import { cn } from "@/lib/utils";
 import { AccountScreen } from "./AccountScreen";
 import { ChatFocusable } from "./ChatFocusable";
 import { TailText } from "./TailText";
-import { TransitIndicator } from "./TransitIndicator";
 import { useFocusArea } from "./useFocusArea";
 import { useMeasuredGrid } from "./useMeasuredGrid";
 import { RecentsScreen } from "./recents/RecentsScreen";
@@ -19,6 +19,11 @@ import type { RecentChat } from "./recents/recentsStore";
 import { BAR_BACK, BAR_EXPAND, BAR_KEYBOARD, BAR_SEND, BASE_COLS, BASE_PLACEMENT, BASE_ROW_TEMPLATE, BASE_SNAP, COMPASS_ROWS, NAV, PHRASE_SLOTS, READ_DOWN, READ_REPLY, READ_UP, SHOW_CONVERSATION, STARTER_ROWS, compassTints, fillTint, slotTarget, slotText, starterTarget, tint, type Phase, type Screen, type Slot, type Span } from "./spatial";
 
 export interface NoHandsScreenProps {
+  /** the element the head pointer maps onto — the whole window, so the sidebar is reachable too. Its
+   * `[data-target]`s (sidebar included) are the Grid Glide fields; the parent draws the transit dot in it. */
+  areaRef: RefObject<HTMLDivElement | null>;
+  /** anything outside this screen that moves its fields (sidebar open/closed, …): re-measure when it changes */
+  areaKey?: string;
   screen: Screen;
   phase: Phase;
   prompt: string;
@@ -71,6 +76,9 @@ const FLIGHT_MS = 460;
 const REVEAL_HOLD_MS = 90;
 /** how long a compass field's fade-in + colour bloom takes */
 const REVEAL_FADE_MS = 600;
+/** the reveal's light clockwise stagger, from the top: each field starts this much after the previous one */
+const REVEAL_STAGGER_MS = 35;
+const CLOCKWISE: Slot[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 const EASE = "cubic-bezier(0.16, 1, 0.3, 1)"; // smooth deceleration, no overshoot
 interface Flight {
   text: string;
@@ -90,15 +98,16 @@ interface Flight {
  * slot keeps its pastel hue, so the colour wheel is part of the spatial grammar.
  */
 export function NoHandsScreen(p: NoHandsScreenProps) {
-  const areaRef = useRef<HTMLDivElement | null>(null);
-  useFocusArea(areaRef, p.enabled);
+  useFocusArea(p.areaRef, p.enabled);
+  /** the block the glide speed is tuned to (it used to be the whole pointer area) */
+  const blockRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = p.prompt.trim().length > 0 && !p.sending;
   const [overflow, setOverflow] = useState(false);
   const onOverflow = useCallback((o: boolean) => setOverflow(o), []);
   const expandable = overflow || p.expanded;
-  const layoutKey = JSON.stringify([p.screen, p.mode, p.phase, p.predictions, p.loading, canSend, p.canUndo, expandable, p.expanded, p.messages.length, p.sending]);
-  useMeasuredGrid(areaRef, p.enabled, layoutKey, BASE_SNAP);
+  const layoutKey = JSON.stringify([p.areaKey, p.screen, p.mode, p.phase, p.predictions, p.loading, canSend, p.canUndo, expandable, p.expanded, p.messages.length, p.sending]);
+  useMeasuredGrid(p.areaRef, p.enabled, layoutKey, BASE_SNAP, blockRef);
   const gridEnabled = p.enabled && !p.expanded;
   const isNew = p.screen === "new";
   const reading = isNew && p.mode === "read";
@@ -116,16 +125,33 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
   /** points at the centre's text wrapper, so the ghost has something real to aim for */
   const centerTextRef = useRef<HTMLDivElement | null>(null);
 
+  const startFlight = useCallback((t: FocusTarget, tintColor: string, origin: Flight["origin"], isPhrase: boolean) => {
+    const el = document.querySelector<HTMLElement>(`[data-target="${t.id}"]`);
+    if (!el) return;
+    setFlight({ text: t.label, tint: tintColor, from: el.getBoundingClientRect(), origin, isPhrase });
+    setRevealed(false);
+  }, []);
+  // mouse / click: the card's own onActivate
   const handlePick = useCallback(
     (t: FocusTarget, tintColor: string, origin: Flight["origin"], isPhrase: boolean) => {
-      const el = document.querySelector<HTMLElement>(`[data-target="${t.id}"]`);
-      if (el) {
-        setFlight({ text: t.label, tint: tintColor, from: el.getBoundingClientRect(), origin, isPhrase });
-        setRevealed(false);
-      }
+      startFlight(t, tintColor, origin, isPhrase);
       p.onActivate(t);
     },
-    [p],
+    [p, startFlight],
+  );
+  // head: a confirmed pick arrives through the dispatcher (the parent applies it) and never passes through the
+  // card's onActivate — so start the same glide from here. Runs synchronously with the dispatch, before React
+  // re-renders, so the card is still where it was; its colour is read back from its own --tint.
+  useEffect(
+    () =>
+      pipeline.dispatcher.register((a: ActionEvent) => {
+        if (a.action !== "PICK" || !a.target) return;
+        const el = document.querySelector<HTMLElement>(`[data-target="${a.target.id}"]`);
+        const slot = a.target.payload?.slot as Slot | undefined;
+        if (!el) return;
+        startFlight(a.target, el.style.getPropertyValue("--tint"), slot ? "slot" : "starter", !!slot && (PHRASE_SLOTS as readonly string[]).includes(slot));
+      }),
+    [startFlight],
   );
 
   // once the compass has mounted alongside an in-flight pick, measure where the word is going to land. If it
@@ -235,9 +261,7 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
   };
 
   return (
-    <div ref={areaRef} className="relative mx-auto w-full min-h-0 max-w-[1180px] flex-1 px-16">
-      {/* minimal transit feedback only (dot + soft cell tint); once settled, ChatFocusable itself takes over */}
-      {p.enabled && <TransitIndicator />}
+    <div ref={blockRef} className="relative mx-auto w-full min-h-0 max-w-[1180px] flex-1 px-16">
       <div className="relative grid h-full min-h-0 gap-2 pb-6 pt-8" style={{ gridTemplateColumns: `repeat(${BASE_COLS}, minmax(0, 1fr))`, gridTemplateRows: BASE_ROW_TEMPLATE }}>
         {content()}
 
@@ -301,8 +325,8 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
             )}
           </div>
         </ChatFocusable>
-        <ChatFocusable target={BAR_SEND} enabled={p.enabled && composing && canSend} flashKey={p.lastFlash[BAR_SEND.id]} radius="rounded-2xl" className={cn("send-control", !composing && "invisible", !canSend && "opacity-20")} style={place(BASE_PLACEMENT.bar.send)} onActivate={p.onActivate}>
-          <Button aria-label="Send" disabled={!canSend} className={cn(CELL, "flex-col gap-1.5 bg-transparent text-[15px] hover:bg-transparent disabled:opacity-100")}>
+        <ChatFocusable target={BAR_SEND} enabled={p.enabled && composing && canSend} flashKey={p.lastFlash[BAR_SEND.id]} radius="rounded-2xl" className={cn(!composing && "invisible")} style={place(BASE_PLACEMENT.bar.send)} onActivate={p.onActivate}>
+          <Button aria-label="Send" disabled={!canSend} className={cn(CELL, "flex-col gap-1.5 text-[15px] disabled:opacity-20")}>
             <ArrowUp className="size-6" strokeWidth={2.5} /> Send
           </Button>
         </ChatFocusable>
@@ -377,22 +401,40 @@ function SlotCell({ slot, span, tintIndex, predictions, loading, enabled, lastFl
   const isPhrase = (PHRASE_SLOTS as readonly string[]).includes(slot);
   const tintValue = tint(tintIndex);
   const tintVar = { ["--tint" as string]: tintValue, ["--fill" as string]: fillTint(tintIndex) };
+  // When predictions arrive *after* the reveal already played (on the loading placeholder), the real field
+  // replaces the placeholder as a fresh element — hold it hidden for two frames so it fades in too, instead
+  // of popping in at full opacity. (State adjusted during render, like `prevPrompt` above.)
+  const ready = !loading && !!text;
+  const [prevReady, setPrevReady] = useState(ready);
+  const [entering, setEntering] = useState(false);
+  if (ready !== prevReady) {
+    setPrevReady(ready);
+    if (ready) setEntering(true);
+  }
+  useEffect(() => {
+    if (!entering) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => { inner = requestAnimationFrame(() => setEntering(false)); });
+    return () => { cancelAnimationFrame(outer); cancelAnimationFrame(inner); };
+  }, [entering]);
+  const shown = revealed && !entering;
   // the tint itself blooms in alongside the opacity fade: starts blended almost entirely into the page
   // background (so it works in both themes) and eases up to full colour, rather than just fading in flat
   const bloomValue = `color-mix(in oklch, ${tintValue}, var(--background) 85%)`;
+  const delay = shown ? CLOCKWISE.indexOf(slot) * REVEAL_STAGGER_MS : 0; // stagger the fade-in only, never the hide
   const revealStyle: React.CSSProperties = {
-    opacity: revealed ? 1 : 0,
-    backgroundColor: revealed ? tintValue : bloomValue,
-    transition: `opacity ${REVEAL_FADE_MS}ms ${EASE}, background-color ${REVEAL_FADE_MS}ms ${EASE}`,
+    opacity: shown ? 1 : 0,
+    backgroundColor: shown ? tintValue : bloomValue,
+    transition: `opacity ${REVEAL_FADE_MS}ms ${EASE} ${delay}ms, background-color ${REVEAL_FADE_MS}ms ${EASE} ${delay}ms`,
   };
-  if (loading || !text) {
+  if (!ready) {
     return <div className="pastel h-full w-full animate-pulse rounded-2xl opacity-60" style={place(span, { ...tintVar, ...revealStyle })} aria-hidden />;
   }
   const t = slotTarget(slot, text);
   // `enabled` itself stays stable across the reveal (ChatFocusable renders a different element tree when it
   // toggles, which would defeat the transition below); `pointer-events-none` keeps it inert while invisible
   return (
-    <ChatFocusable key={slot} target={t} enabled={enabled} flashKey={lastFlash[t.id]} radius="rounded-2xl" onActivate={onActivate} className={cn("pastel", !revealed && "pointer-events-none")} style={place(span, { ...tintVar, ...revealStyle })}>
+    <ChatFocusable key={slot} target={t} enabled={enabled} flashKey={lastFlash[t.id]} radius="rounded-2xl" onActivate={onActivate} className={cn("pastel", !shown && "pointer-events-none")} style={place(span, { ...tintVar, ...revealStyle })}>
       <Button variant="ghost" className={cn(CELL, "px-4 hover:bg-transparent", isPhrase ? "text-[17px]" : "text-xl")}>
         {text}
       </Button>

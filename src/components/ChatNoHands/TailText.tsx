@@ -17,7 +17,7 @@ interface Props extends React.HTMLAttributes<HTMLDivElement> {
 /**
  * Text that wraps but never grows past `className`'s max-height: it scrolls internally and stays pinned to
  * its end, so the newest words are always visible and the surrounding layout never moves. Used for the
- * prompt bar, the current-text panel, the keyboard preview and the Keyboard Chat composer.
+ * prompt bar, the current-text panel and the keyboard preview.
  */
 export function TailText({ children, className, tail, onOverflow, fade, ...rest }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);

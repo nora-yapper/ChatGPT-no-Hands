@@ -47,7 +47,7 @@ export function AccountScreen({ enabled, lastFlash, onActivate, name, email }: A
       </div>
       <Badge variant="secondary" className="px-3 py-1 text-[13px] font-medium">Free plan</Badge>
       <ChatFocusable target={ACCOUNT_LOG_OUT} enabled={enabled} flashKey={lastFlash[ACCOUNT_LOG_OUT.id]} radius="rounded-2xl" className="mt-auto w-full" onActivate={onActivate}>
-        <Button variant="outline" className="h-11 w-full gap-2 text-[15px] font-normal">
+        <Button variant="outline" className="h-11 w-full gap-2 rounded-2xl text-[15px] font-normal">
           <LogOut className="size-4.5" /> Log out
         </Button>
       </ChatFocusable>
@@ -66,7 +66,7 @@ function EditableField({ target, value, primary, enabled, lastFlash, onActivate 
       <Button
         variant="ghost"
         aria-label={target.label}
-        className={cn("h-11 w-full justify-between gap-2 px-3 font-normal hover:bg-muted", primary ? "text-base font-semibold" : "text-sm text-muted-foreground")}
+        className={cn("h-11 w-full justify-between gap-2 rounded-xl px-3 font-normal hover:bg-muted", primary ? "text-base font-semibold" : "text-sm text-muted-foreground")}
       >
         <span className="truncate">{value}</span>
         <Pencil className="size-4 shrink-0 opacity-60" aria-hidden />

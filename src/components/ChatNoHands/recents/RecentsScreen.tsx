@@ -11,46 +11,24 @@ import { BASE_COLS, BASE_PLACEMENT, PHRASE_TINT, tint, type Span } from "../spat
 import { useHeadScrollTarget } from "../useHeadScroll";
 import { recents, relativeTime, sortChats, sortProjects, useRecents, type Project, type RecentChat } from "./recentsStore";
 
-/* ───────────── placement on the shared base grid ─────────────
- * Same block as New Chat's word area (rows 1–9, full block width). Three columns: chats | projects | projects,
- * three cards per column, each 3 base rows tall like a compass field. The counts and the New project button
- * sit in the input-bar rows, where the prompt and Send are on New Chat. */
+/* ───────────── placement ─────────────
+ * Overview: one region over the whole block above the tabs (the word area *and* the input-bar rows — head
+ * scrolling is hard, so show as many cards as fit). Its columns are a subgrid of the base grid, so the
+ * chats | projects split lines up with New Chat's columns; its rows are its own, OVERVIEW_ROWS equal cards.
+ * Left: uncategorised chats. Right: the Projects panel — New project first, then the projects, row-major.
+ * Opened project: its chats across the word area, three cards per column, with Back / New chat in the bar rows. */
 const COL_SPANS = ["1 / 9", "9 / 17", `17 / ${BASE_COLS + 1}`];
+const OVERVIEW_ROWS = 4;
+const OVERVIEW_REGION: Span = { col: `1 / ${BASE_COLS + 1}`, row: "1 / 15" };
+const CHATS_COL = "1 / 9";
+const PROJECTS_COL = `9 / ${BASE_COLS + 1}`;
 const CARD_ROWS = 3;
 const cardSpan = (col: number, row: number): Span => ({ col: COL_SPANS[col], row: `${row * 3 + 1} / ${row * 3 + 4}` });
-/** the two project columns together, behind every project card/tile: one pale panel titled "Projects" instead of a tag on each card */
-const PROJECTS_PANEL_SPAN: Span = { col: `9 / ${BASE_COLS + 1}`, row: "1 / 10" };
-/** the top row leaves this much room for the panel's title — clears the label's own h-6 (24px) box plus a
- * little breathing room (margin alone would push a `h-full` box past the bottom of its own grid cell, so
- * its height is trimmed by the same amount) */
-const PANEL_TOP_INSET = 32;
-/** the bottom row's gap below it, to the panel's own bottom edge (no label to clear there) */
-const PANEL_BOTTOM_INSET = 16;
-/** the middle row's share of the *inter-card* gap on each side — the average of the two edge insets, so a
- * row pair's total gap (this, twice, plus the grid's own gap-2) comes out the same between every pair of
- * rows, instead of compounding a full edge inset from *both* sides of the pair like the edge rows do against
- * the panel itself. Edge rows put their edge inset entirely outward (toward the panel), nothing inward
- * (toward their neighbour), so only the middle row contributes to the gap on either side of it. */
-const PANEL_MID_INSET = (PANEL_TOP_INSET + PANEL_BOTTOM_INSET) / 4;
-/** left/right get slightly more breathing room than top/bottom, so cards read as sitting *on* the panel rather than boxed by it */
-const PANEL_SIDE_INSET = 16;
-const PANEL_ROW_INSET: { top: number; bottom: number }[] = [
-  { top: PANEL_TOP_INSET, bottom: 0 },
-  { top: PANEL_MID_INSET, bottom: PANEL_MID_INSET },
-  { top: 0, bottom: PANEL_BOTTOM_INSET },
-];
-const panelInsetStyle = (row?: number): React.CSSProperties | undefined => {
-  if (row === undefined) return undefined;
-  const { top, bottom } = PANEL_ROW_INSET[row];
-  return {
-    marginTop: top,
-    marginBottom: bottom,
-    marginLeft: PANEL_SIDE_INSET,
-    marginRight: PANEL_SIDE_INSET,
-    width: `calc(100% - ${PANEL_SIDE_INSET * 2}px)`,
-    height: `calc(100% - ${top + bottom}px)`,
-  };
-};
+/** overview chat column: row i of OVERVIEW_ROWS */
+const chatSpan = (i: number): Span => ({ col: CHATS_COL, row: `${i + 1} / ${i + 2}` });
+/** Projects panel: slot k, row-major over its two columns (so a few projects fill both columns evenly); slot 0 is New project */
+const panelSpan = (k: number): Span => ({ col: `${(k % 2) + 1}`, row: `${Math.floor(k / 2) + 1}` });
+const PROJECT_SLOTS = OVERVIEW_ROWS * 2 - 1;
 
 /** every project card shares one pastel (the compass phrase colour) */
 const PROJECT_TINT = PHRASE_TINT;
@@ -78,9 +56,9 @@ function paginate<T>(items: T[], slots: number, page: number): { prev: boolean; 
   return { prev, shown: items.slice(start, start + capacity), more: remainingAll - capacity };
 }
 
-function PagerTile({ span, target, enabled, lastFlash, onActivate, direction, label, panelRow }: { span: Span; target: FocusTarget; enabled: boolean; lastFlash: Record<string, number>; onActivate: (t: FocusTarget) => void; direction: "up" | "down"; label: string; panelRow?: number }) {
+function PagerTile({ span, target, enabled, lastFlash, onActivate, direction, label }: { span: Span; target: FocusTarget; enabled: boolean; lastFlash: Record<string, number>; onActivate: (t: FocusTarget) => void; direction: "up" | "down"; label: string }) {
   return (
-    <ChatFocusable target={target} enabled={enabled} flashKey={lastFlash[target.id]} radius="rounded-2xl" style={place(span, panelInsetStyle(panelRow))} onActivate={onActivate}>
+    <ChatFocusable target={target} enabled={enabled} flashKey={lastFlash[target.id]} radius="rounded-2xl" style={place(span)} onActivate={onActivate}>
       <Button variant="ghost" className="h-full w-full flex-col gap-1.5 rounded-2xl border border-dashed border-border text-[15px] font-normal text-muted-foreground hover:bg-muted">
         {direction === "down" ? <ChevronDown className="size-6" /> : <ChevronUp className="size-6" />} {label}
       </Button>
@@ -166,8 +144,8 @@ export function RecentsScreen({ enabled, lastFlash, onActivate, onOpenChat, curr
   // a project that was deleted while open simply falls back to the overview
   const project = openProject ? projects.find((p) => p.id === openProject) ?? null : null;
   const allUncategorised = sortChats(chats.filter((c) => !c.projectId));
-  const chatPage = paginate(allUncategorised, CARD_ROWS, pages.chats);
-  const projectPage = paginate(sortProjects(projects), CARD_ROWS * 2, pages.projects);
+  const chatPage = paginate(allUncategorised, OVERVIEW_ROWS, pages.chats);
+  const projectPage = paginate(sortProjects(projects), PROJECT_SLOTS, pages.projects);
   const targetsEnabled = enabled && !menu;
   const projectChats = project ? sortChats(chats.filter((c) => c.projectId === project.id)) : [];
   const viewPage = paginate(projectChats, CARD_ROWS * 3, pages.view);
@@ -230,40 +208,37 @@ export function RecentsScreen({ enabled, lastFlash, onActivate, onOpenChat, curr
 
   return (
     <>
-      {/* info strip and New project in the input-bar rows */}
-      <div className="flex items-center gap-6 rounded-2xl border border-composer-border bg-composer px-5 text-sm text-muted-foreground" style={place(BASE_PLACEMENT.bar.prompt)}>
-        <span><span className="font-medium text-foreground">{allUncategorised.length}</span> recent chats</span>
-        <span><span className="font-medium text-foreground">{projects.length}</span> projects</span>
-        <span className="ml-auto hidden text-xs sm:inline">Select a card to open it · drag a chat onto a project to move it</span>
-      </div>
-      <ChatFocusable target={t("new-project", "New project", "RC_NEW_PROJECT")} enabled={targetsEnabled} flashKey={lastFlash["rc-new-project"]} radius="rounded-2xl" style={place(BASE_PLACEMENT.bar.send)} onActivate={activate}>
-        <Button variant="secondary" className="h-full w-full flex-col gap-1.5 rounded-2xl text-[15px] font-normal"><FolderPlus className="size-6" /> New project</Button>
-      </ChatFocusable>
+      {/* same subtle enter as Account (NoHandsScreen switches screens by swapping content) */}
+      <div className="grid gap-2 animate-in fade-in duration-300" style={place(OVERVIEW_REGION, { gridTemplateColumns: "subgrid", gridTemplateRows: `repeat(${OVERVIEW_ROWS}, minmax(0, 1fr))` })}>
+        {/* left column: uncategorised chats, paged (also a drop target to un-file a chat with the mouse) */}
+        {chatPage.prev && <PagerTile span={chatSpan(0)} target={pager("chats", -1, "Previous")} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="up" label="Previous" />}
+        {chatPage.shown.map((c, i) => (
+          <ChatCard key={c.id} chat={c} span={chatSpan(i + (chatPage.prev ? 1 : 0))} {...cardProps(c)} />
+        ))}
+        {chatPage.more > 0 && <PagerTile span={chatSpan(OVERVIEW_ROWS - 1)} target={pager("chats", 1, `${chatPage.more} more`)} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="down" label={`${chatPage.more} more chats`} />}
+        {allUncategorised.length === 0 && (
+          <div className={cn("flex items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground", dropOver === "none" && "border-foreground bg-muted")} style={place(chatSpan(0))} onDragOver={(e) => { e.preventDefault(); setDropOver("none"); }} onDragLeave={() => setDropOver(null)} onDrop={() => drop(null)}>
+            No recent chats
+          </div>
+        )}
 
-      {/* left column: uncategorised chats, paged (also a drop target to un-file a chat) */}
-      {chatPage.prev && <PagerTile span={cardSpan(0, 0)} target={pager("chats", -1, "Previous")} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="up" label="Previous" />}
-      {chatPage.shown.map((c, i) => (
-        <ChatCard key={c.id} chat={c} span={cardSpan(0, i + (chatPage.prev ? 1 : 0))} {...cardProps(c)} />
-      ))}
-      {chatPage.more > 0 && <PagerTile span={cardSpan(0, CARD_ROWS - 1)} target={pager("chats", 1, `${chatPage.more} more`)} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="down" label={`${chatPage.more} more chats`} />}
-      {allUncategorised.length === 0 && (
-        <div className={cn("flex items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground", dropOver === "none" && "border-foreground bg-muted")} style={place(cardSpan(0, 0))} onDragOver={(e) => { e.preventDefault(); setDropOver("none"); }} onDragLeave={() => setDropOver(null)} onDrop={() => drop(null)}>
-          No recent chats
-        </div>
-      )}
-
-      {/* right two columns: projects, paged column-major (drop targets), on one pale panel titled once instead of a tag per card */}
-      <div aria-hidden className="pastel pointer-events-none relative rounded-[28px]" style={place(PROJECTS_PANEL_SPAN, { ["--tint" as string]: tint(PROJECT_TINT) })}>
-        <div className="absolute left-0 top-0 flex h-6 items-center gap-1.5 px-5 text-xs font-semibold uppercase tracking-[0.12em] opacity-70">
-          <Folder className="size-3.5" /> Projects
-        </div>
+        {/* right: the Projects panel — titled once, New project in its first slot, projects paged row-major */}
+        <section aria-label="Projects" className="pastel flex min-h-0 flex-col gap-3 rounded-[28px] p-4" style={place({ col: PROJECTS_COL, row: "1 / -1" }, { ["--tint" as string]: tint(PROJECT_TINT) })}>
+          <div className="flex h-5 shrink-0 items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-[0.12em] opacity-70">
+            <Folder className="size-3.5" /> Projects
+          </div>
+          <div className="grid min-h-0 flex-1 grid-cols-2 gap-3" style={{ gridTemplateRows: `repeat(${OVERVIEW_ROWS}, minmax(0, 1fr))` }}>
+            <ChatFocusable target={t("new-project", "New project", "RC_NEW_PROJECT")} enabled={targetsEnabled} flashKey={lastFlash["rc-new-project"]} radius="rounded-xl" style={place(panelSpan(0))} onActivate={activate}>
+              <Button variant="ghost" className="h-full w-full flex-col gap-1.5 rounded-xl border border-dashed border-current/25 text-[15px] font-normal hover:bg-transparent"><FolderPlus className="size-6" /> New project</Button>
+            </ChatFocusable>
+            {projectPage.prev && <PagerTile span={panelSpan(1)} target={pager("projects", -1, "Previous")} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="up" label="Previous" />}
+            {projectPage.shown.map((p, i) => (
+              <ProjectCard key={p.id} project={p} count={chats.filter((c) => c.projectId === p.id).length} span={panelSpan(1 + i + (projectPage.prev ? 1 : 0))} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} dropOver={dropOver === p.id} dragging={!!dragging} onDragOver={(e) => { e.preventDefault(); setDropOver(p.id); }} onDragLeave={() => setDropOver(null)} onDrop={() => drop(p.id)} />
+            ))}
+            {projectPage.more > 0 && <PagerTile span={panelSpan(PROJECT_SLOTS)} target={pager("projects", 1, `${projectPage.more} more`)} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="down" label={`${projectPage.more} more projects`} />}
+          </div>
+        </section>
       </div>
-      {projectPage.prev && <PagerTile span={slotSpan(1, 0)} target={pager("projects", -1, "Previous")} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="up" label="Previous" panelRow={0} />}
-      {projectPage.more > 0 && <PagerTile span={slotSpan(1, CARD_ROWS * 2 - 1)} target={pager("projects", 1, `${projectPage.more} more`)} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} direction="down" label={`${projectPage.more} more projects`} panelRow={CARD_ROWS - 1} />}
-      {projectPage.shown.map((p, i) => {
-        const slot = i + (projectPage.prev ? 1 : 0);
-        return <ProjectCard key={p.id} project={p} count={chats.filter((c) => c.projectId === p.id).length} span={slotSpan(1, slot)} panelRow={slot % CARD_ROWS} enabled={targetsEnabled} lastFlash={lastFlash} onActivate={activate} dropOver={dropOver === p.id} dragging={!!dragging} onDragOver={(e) => { e.preventDefault(); setDropOver(p.id); }} onDragLeave={() => setDropOver(null)} onDrop={() => drop(p.id)} />;
-      })}
 
       {menu && <MenuPanel menu={menu} chats={chats} projects={projects} enabled={enabled} lastFlash={lastFlash} onActivate={activate} />}
     </>
@@ -313,7 +288,7 @@ function ChatCard({ chat, span, enabled, lastFlash, onActivate, onDragStart, onD
  * title, and how many chats it holds (not which ones — the panel is a nav target, not a preview). Same
  * shape as a chat card; the menu column is the field.
  */
-function ProjectCard({ project, count, span, enabled, lastFlash, onActivate, panelRow, dropOver, dragging, onDragOver, onDragLeave, onDrop }: { project: Project; count: number; panelRow?: number; dropOver: boolean; dragging: boolean; onDragOver: React.DragEventHandler; onDragLeave: () => void; onDrop: () => void } & CardCommon) {
+function ProjectCard({ project, count, span, enabled, lastFlash, onActivate, dropOver, dragging, onDragOver, onDragLeave, onDrop }: { project: Project; count: number; dropOver: boolean; dragging: boolean; onDragOver: React.DragEventHandler; onDragLeave: () => void; onDrop: () => void } & CardCommon) {
   const menuTarget = t(`project-${project.id}-menu`, `Menu for ${project.title}`, "RC_MENU_PROJECT", { id: project.id });
   const openTarget = t(`project-${project.id}-open`, `Open ${project.title}`, "RC_OPEN_PROJECT", { id: project.id });
   return (
@@ -321,11 +296,9 @@ function ProjectCard({ project, count, span, enabled, lastFlash, onActivate, pan
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={(e) => { e.preventDefault(); onDrop(); }}
-      // card-force-light pins this subtree to the light tokens, so it still reads as a white sheet on the pastel panel in dark mode.
-      // `relative`: the pale panel behind it is also `position: relative` (for its own label) — without this, this
-      // static div would lose to that positioned sibling and paint *under* the panel regardless of DOM order.
-      className={cn("card-force-light relative flex h-full min-w-0 items-stretch overflow-hidden rounded-xl bg-background ring-1 transition-transform", dropOver ? "scale-[1.02] ring-2 ring-foreground" : dragging ? "ring-2 ring-dashed ring-foreground/30" : "ring-border")}
-      style={place(span, panelInsetStyle(panelRow))}
+      // same surface/text tokens as a chat card, so it follows the theme (dark sheet on the dark pastel panel)
+      className={cn("flex h-full min-w-0 items-stretch overflow-hidden rounded-xl bg-background text-foreground ring-1 transition-transform", dropOver ? "scale-[1.02] ring-2 ring-foreground" : dragging ? "ring-2 ring-dashed ring-foreground/30" : "ring-border")}
+      style={place(span)}
     >
       <ChatFocusable target={openTarget} enabled={enabled} flashKey={lastFlash[openTarget.id]} radius="rounded-none" className="flex min-w-0 flex-1" onActivate={onActivate}>
         <button type="button" aria-label={openTarget.label} className="flex h-full w-full min-w-0 flex-col justify-center gap-2 px-4 py-2 text-left hover:bg-muted/60">
@@ -335,7 +308,7 @@ function ProjectCard({ project, count, span, enabled, lastFlash, onActivate, pan
             <div className="truncate text-[16px] font-semibold tracking-[-0.01em]">{project.title}</div>
           </div>
           <div className="text-xs text-muted-foreground">
-            {count === 0 ? (dragging ? "Drop a chat here" : "Empty · drop a chat here") : count === 1 ? "1 chat" : `${count} chats`}
+            {count === 0 ? (dragging ? "Drop a chat here" : "Empty") : count === 1 ? "1 chat" : `${count} chats`}
           </div>
         </button>
       </ChatFocusable>
@@ -381,7 +354,7 @@ function MenuPanel({ menu, chats, projects, enabled, lastFlash, onActivate }: { 
   const cols = tiles <= 4 ? 2 : 3;
   const rows = Math.ceil(tiles / cols);
   return (
-    <div className="z-[5] flex min-h-0 flex-col rounded-[24px] border border-border bg-card p-3 shadow-[0_8px_32px_rgba(0,0,0,0.16)] animate-in fade-in zoom-in-95 duration-200" style={place({ col: `9 / ${BASE_COLS + 1}`, row: "1 / 10" })} role="menu" aria-label={`Menu: ${title}`}>
+    <div className="z-[5] flex min-h-0 flex-col rounded-[24px] border border-border bg-card p-3 shadow-[0_8px_32px_rgba(0,0,0,0.16)] animate-in fade-in zoom-in-95 duration-200" style={place({ col: PROJECTS_COL, row: OVERVIEW_REGION.row })} role="menu" aria-label={`Menu: ${title}`}>
       <div className="mb-2 truncate px-2 text-xs font-medium text-muted-foreground">{menu.mode === "move" ? `Move “${title}” to` : title}</div>
       <div className="grid min-h-0 flex-1 gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
         {items.map((it) => (

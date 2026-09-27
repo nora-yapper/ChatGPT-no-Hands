@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "ChatGPT no Hands",
+  title: "ISNT",
   description: "Hands-free chat interface controlled through head movement and facial expressions. All camera processing is local.",
 };
 

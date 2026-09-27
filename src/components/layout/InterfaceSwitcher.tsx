@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 
 const INTERFACES = [
   { href: "/", label: "INPUT LAB" },
-  { href: "/chat", label: "CHATGPT NO HANDS" },
-  { href: "/chat/keyboard", label: "KEYBOARD CHAT" },
+  { href: "/chat", label: "ISNT" },
 ];
 
 /** Tab strip to switch between the two interfaces. Both share the same camera + gesture pipeline. */
