@@ -12,6 +12,7 @@ import type { ActionEvent, FocusTarget } from "@/types/interaction";
 import { cn } from "@/lib/utils";
 import { ACTIONS, DEFAULT_ISNT, FLIP_DOCS, GESTURES, LEVELS, PRESETS, applyPreset, assign, gestureLabel, gestureOf, resetMovement, slotOf, stepLevel, type GestureSlot, type IsntGesture, type IsntSettings, type LevelId } from "@/isnt/isntSettings";
 import { ChatFocusable } from "./ChatFocusable";
+import { Technicalities } from "./Technicalities";
 import { TilePanel } from "./TilePanel";
 import { useHeadScrollTarget } from "./useHeadScroll";
 
@@ -45,7 +46,7 @@ const tintVars = (i: number) => ({ ["--tint" as string]: `var(--pastel-${i})`, [
 type MoreView = "menu" | "legend" | "tech" | "advanced";
 const MORE_PAGES: Record<Exclude<MoreView, "menu">, { title: string; icon: React.ReactNode }> = {
   legend: { title: "Colour legend", icon: <Palette /> },
-  tech: { title: "Technicalities", icon: <Cpu /> }, // empty for now
+  tech: { title: "Technicalities", icon: <Cpu /> },
   advanced: { title: "About controls", icon: <SlidersHorizontal /> },
 };
 
@@ -144,7 +145,7 @@ function explanations(s: IsntSettings, slot: GestureSlot | null): Record<string,
     "is-close": "Close without changing anything.",
     "is-more": "More: what the colours on this screen mean, technical details, and what each control changes underneath.",
     "is-more-legend": "Colour legend: what each colour on this screen stands for.",
-    "is-more-tech": "Technicalities: not available yet.",
+    "is-more-tech": "Technicalities: how ISNT works, stage by stage, the research it's based on and the open-source tools it uses.",
     "is-more-advanced": "About controls: what each Movement setting changes underneath, with its default and safe range.",
     "is-more-back": "Back to the More menu.",
     "is-more-close": "Close this panel.",
@@ -214,8 +215,9 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
   const [slot, setSlot] = useState<GestureSlot | null>(null);
   /** the "More" popup: its menu, or one of its pages */
   const [more, setMore] = useState<MoreView | null>(null);
-  /** More › About controls, open over the whole Account block */
-  const [advanced, setAdvanced] = useState(false);
+  /** a More page too big for the panel (About controls, Technicalities), open over the whole Account block */
+  const [fullPage, setFullPage] = useState<"advanced" | "tech" | null>(null);
+  const advanced = fullPage !== null;
   useEffect(() => {
     onCover?.(advanced);
     return () => onCover?.(false); // leaving Account with it open mustn't leave the tabs switched off
@@ -232,9 +234,9 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
     switch (action) {
       case "IS_TAB": setTab(p.tab as Tab); setSlot(null); setMore(null); setNotice(null); break;
       case "IS_MORE": setMore((m) => (m ? null : "menu")); setSlot(null); break;
-      case "IS_MORE_VIEW": if (p.view === "advanced") { setMore(null); setAdvanced(true); } else setMore(p.view as MoreView); break;
-      case "IS_ADV_BACK": setAdvanced(false); setMore("menu"); break;
-      case "IS_ADV_CLOSE": setAdvanced(false); break;
+      case "IS_MORE_VIEW": if (p.view === "advanced" || p.view === "tech") { setMore(null); setFullPage(p.view); } else setMore(p.view as MoreView); break;
+      case "IS_ADV_BACK": setFullPage(null); setMore("menu"); break;
+      case "IS_ADV_CLOSE": setFullPage(null); break;
       case "IS_MORE_CLOSE": setMore(null); break;
       case "IS_SLOT": setSlot(p.slot as GestureSlot); setNotice(null); break;
       case "IS_CLOSE": setSlot(null); break;
@@ -466,14 +468,14 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
           onActivate={activate}
           onHover={setHover}
         >
-          {more === "legend" ? <ColorLegend /> : more === "menu" ? undefined : <div aria-hidden />}
+          {more === "legend" ? <ColorLegend /> : undefined}
         </TilePanel>
       )}
-      {advanced && advancedHost && createPortal(
+      {fullPage && advancedHost && createPortal(
         <TilePanel
           className="pointer-events-auto absolute inset-0"
           tilesClassName="h-[clamp(3rem,7vh,4.5rem)]" // a lower Back / Close row: the table needs the height
-          title="About controls"
+          title={MORE_PAGES[fullPage ?? "advanced"].title}
           items={[{ target: t("adv-back", "Back", "IS_ADV_BACK"), icon: <ArrowLeft />, label: "Back" }]}
           close={t("adv-close", "Close", "IS_ADV_CLOSE")}
           enabled={enabled}
@@ -481,7 +483,7 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
           onActivate={activate}
           onHover={setHover}
         >
-          <AdvancedTable active={enabled} />
+          {fullPage === "tech" ? <Technicalities active={enabled} /> : <AdvancedTable active={enabled} />}
         </TilePanel>,
         advancedHost,
       )}

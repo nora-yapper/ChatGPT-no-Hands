@@ -317,17 +317,19 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
           </ChatFocusable>
         )}
 
-        {/* reading mode bar: scroll up | scroll down | reply */}
+        {/* reading mode: scroll up, scroll down and Reply stacked on the transcript's right */}
         {reading && (
           <>
-            <ChatFocusable target={READ_UP} enabled={p.enabled} flashKey={p.lastFlash[READ_UP.id]} radius="rounded-2xl" style={place(BASE_PLACEMENT.read.up)} onActivate={p.onActivate}>
-              <Button variant="secondary" aria-label="Scroll up" className={cn(CELL, "flex-col gap-1.5 text-[15px] text-muted-foreground")}><ChevronUp className="size-6" /> Up</Button>
-            </ChatFocusable>
-            <ChatFocusable target={READ_DOWN} enabled={p.enabled} flashKey={p.lastFlash[READ_DOWN.id]} radius="rounded-2xl" style={place(BASE_PLACEMENT.read.down)} onActivate={p.onActivate}>
-              <Button variant="secondary" aria-label="Scroll down" className={cn(CELL, "flex-col gap-1.5 text-[15px] text-muted-foreground")}><ChevronDown className="size-6" /> Down</Button>
-            </ChatFocusable>
+            <div className="grid min-h-0 grid-rows-2 gap-2" style={place(BASE_PLACEMENT.read.scroll)}>
+              <ChatFocusable target={READ_UP} enabled={p.enabled} flashKey={p.lastFlash[READ_UP.id]} radius="rounded-2xl" onActivate={p.onActivate}>
+                <Button variant="secondary" aria-label="Scroll up" className={cn(CELL, "flex-col gap-1.5 text-[15px] text-muted-foreground")}><ChevronUp className="size-6" /> Up</Button>
+              </ChatFocusable>
+              <ChatFocusable target={READ_DOWN} enabled={p.enabled} flashKey={p.lastFlash[READ_DOWN.id]} radius="rounded-2xl" onActivate={p.onActivate}>
+                <Button variant="secondary" aria-label="Scroll down" className={cn(CELL, "flex-col gap-1.5 text-[15px] text-muted-foreground")}><ChevronDown className="size-6" /> Down</Button>
+              </ChatFocusable>
+            </div>
             <ChatFocusable target={READ_REPLY} enabled={p.enabled && !p.sending} flashKey={p.lastFlash[READ_REPLY.id]} radius="rounded-2xl" style={place(BASE_PLACEMENT.read.reply)} onActivate={p.onActivate}>
-              <Button aria-label="Reply" disabled={p.sending} className={cn(CELL, "gap-3 text-[17px] disabled:opacity-40")}><MessageSquare className="size-6" /> {p.sending ? "Waiting for the reply…" : "Reply"}</Button>
+              <Button aria-label="Reply" disabled={p.sending} className={cn(CELL, "flex-col gap-1.5 px-3 text-[17px] disabled:opacity-40")}><MessageSquare className="size-6" /> {p.sending ? "Waiting…" : "Reply"}</Button>
             </ChatFocusable>
           </>
         )}

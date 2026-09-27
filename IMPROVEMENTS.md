@@ -592,3 +592,72 @@ Implemented as planned. The Input Lab's settings and panel are unchanged (no dif
   - The field opacity never dips after the reveal.
   - A pick mid-stream followed by Back refills all 8.
   - Screenshot mid-stream. 95 tests pass (new: line parsing; incremental selection matches the whole-set selection). tsc and lint are clean; the console is clean.
+
+## 23. [x] New Chat reading mode: bigger messages area, controls stacked on the right
+
+> The messages section needs to be larger. Stack Up, Down and Reply vertically on its right side.
+
+**Done.**
+- **Transcript:** it now spans base rows 1–14 (down to where the input bar sits) and columns 1–21, instead of rows 1–9 across the full width. At 1440×900 it's 882×620 px, up from about 1135×420: roughly 200 px taller and 17% more area. The 768 px reading column still fits.
+- **Controls:** on the right, 4 columns wide: Up and Down share rows 1–9, split evenly inside one wrapper (the 9 flexible rows don't halve on the grid); Reply takes rows 10–14, level with the input bar in compose mode. Reply is icon over label; while sending it reads "Waiting…" so it fits the narrow column.
+- **Checked:**
+  - Screenshots at 1440×900 (light) and 1024×700 (dark): at 1440 it's Up 206 / Down 206 / Reply 192 px; at 1024, 106 / 106 / 192.
+  - Reply opens the composer (read buttons gone, Conversation field present); Conversation returns to reading.
+  - The console is clean; tsc and lint are clean.
+
+## 24. [x] Technicalities: open-source tools and research
+
+> In Technicalities, write out the open-source tools used and the research it was based on, including Villaroman, Rowe & Helps (2013). Use the paper's five stages (user input, capture technology, feature retrieval, feature processing, pointer behaviour) to structure the tech part.
+
+**Done.**
+- **Page:** More › Technicalities (new `Technicalities.tsx`) opens in the same full-screen popup as About controls, covering the whole Account block. The nav tabs are off while it's open, and Back / Close work as there. `advanced: boolean` became `fullPage: "advanced" | "tech" | null`.
+- **Content:**
+  - **Five stages:** five cards, left to right with arrows, each with the paper's definition, what ISNT does, and the tools used:
+    1. **User input:** head movement plus face and head gestures.
+    2. **Capture:** webcam via getUserMedia, 640×480 at ~30 fps, local only.
+    3. **Feature retrieval:** MediaPipe Face Landmarker (478 landmarks, 52 blendshapes, head pose; expression-proof pose).
+    4. **Feature processing:** calibration, EMA smoothing, dead zone, detectors, state machine.
+    5. **Pointer behaviour:** Grid Glide's magnetic snap, constant pixel speed, dwell to arm and gesture to confirm.
+  - **Beyond the paper:** composing without typing: starter words, streamed Claude predictions, Offline mode.
+  - **Research:** the full citation with DOI (verified against the ACM record: RIIT '13, pp. 65–70, doi:10.1145/2512209.2512218) and the UMN CCAPS prompt terms.
+  - **Open-source tools:** the table of tools with their licences, read from each installed package.
+- **README:** "Research & open source" now cites the paper and maps its five stages onto the pipeline.
+- **Checked:**
+  - It fits exactly at 1440×900 (611 of 611 px).
+  - At 1280×800 and 1024×700 it scrolls, and it's the head-scroll target while open.
+  - Back returns to the More menu. Screenshots in both themes; the console, tsc and lint are clean.
+
+## 25. [x] Sidebar: show the AI's last reply while replying
+
+> In the sidebar, add a small section that shows the last message in a chat: when a chat is open and the user selects Reply, they can see what the AI's response was.
+
+**Done.**
+- **What:** a "Last reply" card (`SidebarLastReply`) in the sidebar's free space, between the interface switcher and the camera card. It shows the most recent assistant message as plain text, like the transcript.
+- **When:** only while composing in an ongoing chat (New Chat, a transcript exists, after Reply). It's hidden on a fresh chat, in reading mode (the transcript is visible there) and on other screens. It fades in, and it updates when a new reply arrives.
+- **Size:** it fills whatever height is free: 359 px at 1440×900, 159 px at 1024×700. A long reply scrolls with the mouse, with a fade at the bottom. It isn't a head target; the full conversation is one Conversation field away.
+- **Checked with real Claude:** send, then Reply, and the card shows the reply; Conversation hides it again. Screenshots in both themes; the console, tsc and lint are clean.
+- **Noticed, not changed:** at 1024×700 the existing "Conversation" label is clipped in the narrow left column (it predates this change).
+
+**Follow-up (starts at the bottom):** the card now opens scrolled to the end of the reply (re-scrolled whenever the reply changes), where it usually asks or concludes. The fade moved to the top, where earlier text is cut off, and scrolling up with the mouse shows the rest. Checked at 1024×700: scrollTop 155 of 155; the last line is fully visible.
+
+**Follow-up (head scroll):** the Last reply card is the head-scroll surface while it's shown (`useHeadScrollTarget` in `SidebarLastReply`). It's active under the same conditions as the transcript in reading mode: the sidebar is open and no keyboard or rename popup is open. Nothing else claims head scroll while composing, and the transcript takes it back in reading mode.
+- **Checked in the browser** by driving the registered surface the way the head-scroll controller does:
+  - The card, starting at 135 of 135, went to 15 after scrolling up 120 and to 75 after scrolling down 60.
+  - With the keyboard open, no surface is registered.
+  - The handoff is correct: transcript while reading, card while composing, transcript again after Conversation.
+
+## 26. [x] Footer hint: width of the inputs, wording that follows the settings
+
+> Limit the width of the text at the bottom to the width of the middle section's inputs. The text also has to update properly according to the settings.
+
+**Done.**
+- **Width:** the footer uses the same block width and side padding as the screen above it (`max-w-[1180px] px-16`), so its text box lines up with the input bar and tabs. Measured: 324–1376 px at 1440 and 324–960 px at 1024, identical to the tabs.
+- **Wording:**
+  - The text was already tied to the settings, but it pasted gesture labels into a fixed sentence. So anything other than the defaults read badly ("then long blink to confirm", "Turn head left toggles…").
+  - Each gesture now has an instruction phrase (`gestureInstruction` in `isntSettings.ts`: "open your mouth", "do a long blink", "tip your head to your left shoulder", …), and the line is built from the current confirm gesture and scroll-toggle shortcut (`footerHint`).
+  - The scroll sentence is left out when no gesture toggles scrolling.
+- **Checked live** by changing settings in the browser:
+  - Default: "…then open your mouth to confirm. To turn head-tilt scrolling on or off, raise both eyebrows."
+  - Long blink and left shoulder: "…then do a long blink to confirm. To turn head-tilt scrolling on or off, tip your head to your left shoulder."
+  - No scroll gesture: the sentence is omitted.
+  - tsc, lint and 95 tests pass.

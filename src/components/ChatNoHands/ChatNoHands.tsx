@@ -19,12 +19,12 @@ import { fallbackPredictions, selectPredictions, type Predictions } from "@/chat
 import { buildPrompt, pushSegment, undoSegment, type Segment } from "@/chat/promptState";
 import { cn } from "@/lib/utils";
 import { NoHandsScreen } from "./NoHandsScreen";
-import { SidebarCloseButton, SidebarInterfaces, SidebarOfflineToggle, SidebarOpenButton, SidebarThemeToggle, sidebarAction } from "./SidebarControls";
+import { SidebarCloseButton, SidebarInterfaces, SidebarLastReply, SidebarOfflineToggle, SidebarOpenButton, SidebarThemeToggle, sidebarAction } from "./SidebarControls";
 import { TransitIndicator } from "./TransitIndicator";
 import { KeyboardModal } from "./KeyboardModal";
 import { RenameKeyboardModal } from "./RenameKeyboardModal";
 import { useHeadScrollTarget } from "./useHeadScroll";
-import { ACTIONS, commitConfirm, gestureLabel, profileFor, revertConfirm, shortcutFor } from "@/isnt/isntSettings";
+import { ACTIONS, commitConfirm, gestureInstruction, gestureLabel, profileFor, revertConfirm, shortcutFor, type IsntSettings } from "@/isnt/isntSettings";
 import type { Phase, Screen } from "./spatial";
 import { recents, type RecentChat } from "./recents/recentsStore";
 
@@ -37,6 +37,16 @@ function readTheme(): Theme {
   } catch {
     return "light";
   }
+}
+
+/** The footer's how-to line, written from the current ISNT settings (confirm gesture, scroll toggle). */
+function footerHint(s: IsntSettings): string {
+  const scroll = s.shortcuts.SCROLL_TOGGLE;
+  return [
+    `Move your head to glide and stop on a field to focus it, then ${gestureInstruction(s.confirm)} to confirm.`,
+    scroll ? `To turn head-tilt scrolling on or off, ${gestureInstruction(scroll)}.` : null,
+    "Change gestures and shortcuts in Account › Settings. Camera frames never leave this browser.",
+  ].filter(Boolean).join(" ");
 }
 
 /** Offline mode (sidebar): nothing is sent to Claude — predictions come from the local rules, replies are a notice */
@@ -498,6 +508,7 @@ export default function ChatNoHands() {
   // reading mode (an ongoing conversation, composer collapsed): once head scroll is toggled on, tilting the
   // head down/up scrolls the transcript at a speed proportional to how far it's tilted
   const reading = screen === "new" && hasTranscript && !composing;
+  const lastReply = screen === "new" && hasTranscript && composing ? (messages.findLast((m) => m.role === "assistant")?.content ?? null) : null;
   const scrollTranscript = useCallback((deltaPx: number) => {
     const el = transcriptRef.current;
     if (!el) return;
@@ -521,7 +532,9 @@ export default function ChatNoHands() {
           </div>
           <SidebarInterfaces current="chat" enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
 
-          <div className="flex-1" />
+          {/* replying in an ongoing chat: the AI's last message, for reference while the transcript is hidden */}
+          {lastReply ? <SidebarLastReply key={lastReply} text={lastReply} active={sidebarOpen && !keyboardOpen && !renameTarget} /> : <div className="flex-1" />}
+          {lastReply && <div className="h-3 shrink-0" />}
 
           <div className="px-3 pb-3">
             <div className="rounded-2xl border border-sidebar-border bg-background p-2">
@@ -635,10 +648,11 @@ export default function ChatNoHands() {
             accountEmail={accountEmail}
           />
 
-          <p className="shrink-0 pb-6 text-center text-xs text-muted-foreground">
+          {/* as wide as the input bar and tabs above it (same block width and side padding as NoHandsScreen) */}
+          <p className="mx-auto w-full max-w-[1180px] shrink-0 px-16 pb-6 text-center text-xs text-muted-foreground">
             {camOn && !settings.calibration
               ? "Not calibrated — press Calibrate in the sidebar for accurate head pointing."
-              : `Move your head to glide, stop on a field to focus it, then ${gestureLabel(isnt.confirm).toLowerCase()} to confirm.${isnt.shortcuts.SCROLL_TOGGLE ? ` ${gestureLabel(isnt.shortcuts.SCROLL_TOGGLE)} toggles head-tilt scrolling.` : ""} Gestures and shortcuts: Account › Settings. Camera frames never leave this browser.`}
+              : footerHint(isnt)}
           </p>
 
           {keyboardOpen && <KeyboardModal buffer={kbBuffer} prompt={prompt} lastFlash={lastFlash} onActivate={onActivate} />}

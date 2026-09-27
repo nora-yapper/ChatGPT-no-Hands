@@ -111,9 +111,11 @@ export const BASE_PLACEMENT = {
   /** in an ongoing conversation the left column is shared: Keyboard on top, Show conversation below */
   keyboardSplit: { col: full(1, SIDE_COLS + 1), row: "1 / 6" } as Span,
   conversation: { col: full(1, SIDE_COLS + 1), row: "6 / 10" } as Span,
-  /** reading mode: the transcript fills the whole block; the bar row is scroll up | scroll down | reply */
-  transcript: { col: full(1, BASE_COLS + 1), row: "1 / 10" } as Span,
-  read: { up: { col: full(1, 6), row: "12 / 15" }, down: { col: full(6, 11), row: "12 / 15" }, reply: { col: full(11, BASE_COLS + 1), row: "12 / 15" } } as Record<"up" | "down" | "reply", Span>,
+  /** reading mode: the transcript takes everything above the tabs except a 4-column strip on the right, where
+   * scroll up, scroll down and Reply are stacked (Reply at the bottom, level with where the input bar sits).
+   * `scroll` holds Up and Down, split evenly inside it — the 9 flexible rows don't halve on the grid itself. */
+  transcript: { col: full(1, BASE_COLS - 3), row: "1 / 15" } as Span,
+  read: { scroll: { col: full(BASE_COLS - 3, BASE_COLS + 1), row: "1 / 10" }, reply: { col: full(BASE_COLS - 3, BASE_COLS + 1), row: "10 / 15" } } as Record<"scroll" | "reply", Span>,
   /** Back: the block's right column, as tall as the word grid */
   back: { col: full(BASE_COLS - SIDE_COLS + 1, BASE_COLS + 1), row: "1 / 10" } as Span,
   /** input bar (base rows 12–14, two empty rows below the word grid) across the whole block: prompt ~2/3, send ~1/3 */

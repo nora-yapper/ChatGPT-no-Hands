@@ -1,11 +1,13 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { FlaskConical, MessageSquare, Moon, PanelLeft, Sun, WifiOff } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
 import type { FocusTarget } from "@/types/interaction";
 import { cn } from "@/lib/utils";
 import { ChatFocusable } from "./ChatFocusable";
+import { useHeadScrollTarget } from "./useHeadScroll";
 
 /*
  * The chat interface's sidebar controls, head-focusable like everything else: the pointer's area is the whole
@@ -128,5 +130,31 @@ export function SidebarOfflineToggle({ offline, claudeReady, ...p }: Common & { 
         </span>
       </button>
     </ChatFocusable>
+  );
+}
+
+/**
+ * While replying in an ongoing chat the transcript is out of view, so the sidebar's free space shows the AI's last
+ * message for reference. Read-only (not a head target): it fills the gap between the interfaces and the camera
+ * card and starts scrolled to the bottom — the end of the reply, where it usually asks or concludes — with a fade
+ * at the top where earlier text is cut off. Scroll up to read the rest, with the mouse or with head scroll (it is
+ * the head-scroll surface while shown — nothing else claims it while composing). The whole conversation is one
+ * "Conversation" field away.
+ */
+export function SidebarLastReply({ text, active }: { text: string; active: boolean }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useHeadScrollTarget({ scrollBy: (dy) => boxRef.current?.scrollBy({ top: dy, behavior: "instant" }) }, active);
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [text]);
+  return (
+    <section className="mx-3 mt-4 flex min-h-0 flex-1 flex-col rounded-2xl border border-sidebar-border bg-background animate-in fade-in duration-300" aria-label="Last reply">
+      <div className="px-3 pb-1 pt-2.5 text-xs font-medium text-muted-foreground">Last reply</div>
+      <div className="relative min-h-0 flex-1">
+        <div ref={boxRef} className="h-full overflow-auto whitespace-pre-wrap break-words px-3 pb-3 pt-2 text-[13px] leading-[1.55] text-foreground">{text}</div>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-gradient-to-b from-background to-transparent" aria-hidden />
+      </div>
+    </section>
   );
 }

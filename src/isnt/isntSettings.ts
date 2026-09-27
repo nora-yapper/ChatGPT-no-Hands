@@ -30,6 +30,19 @@ const FACE: readonly string[] = ["MOUTH_HOLD", "BROW_RAISE_BOTH", "LONG_BLINK"];
 export const isFaceGesture = (g: string): g is FaceGesture => FACE.includes(g);
 const isGesture = (g: unknown): g is IsntGesture => typeof g === "string" && (FACE.includes(g) || (HEAD_POSE_GESTURE_TYPES as string[]).includes(g));
 export const gestureLabel = (g: IsntGesture | null) => GESTURES.find((x) => x.id === g)?.label ?? "None";
+/** the gesture as an instruction that fits a sentence ("…, then open your mouth to confirm") */
+const INSTRUCTIONS: Record<IsntGesture, string> = {
+  MOUTH_HOLD: "open your mouth",
+  BROW_RAISE_BOTH: "raise both eyebrows",
+  LONG_BLINK: "do a long blink",
+  TURN_LEFT: "turn your head left",
+  TURN_RIGHT: "turn your head right",
+  TILT_UP: "tilt your head up",
+  TILT_DOWN: "tilt your head down",
+  ROLL_LEFT: "tip your head to your left shoulder",
+  ROLL_RIGHT: "tip your head to your right shoulder",
+};
+export const gestureInstruction = (g: IsntGesture) => INSTRUCTIONS[g];
 
 /* ───────────── shortcut actions ───────────── */
 

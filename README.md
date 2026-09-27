@@ -33,10 +33,10 @@ the tab strip in the header:
      verbatim and re-predicted), a **Back** control that removes only the most recent segment (predicted or typed)
      and restores that state's predictions, and a **Send** control. The bar grows with the wrapped prompt up to two lines; beyond that the text is cut off with a fade and the bar text itself becomes a head-selectable target that expands a panel over the compass showing the whole prompt (select again to collapse). The prompt is stored as segments
      (`src/chat/promptState.ts`), so it can be reconstructed and predicted vs. manual input stays distinguishable.
-  4. *Reading mode.* Sending collapses the composer: the conversation fills the block and the bar row becomes
-     three fields — scroll up, scroll down and **Reply**. Reply brings the word grid back; while composing in an
+  4. *Reading mode.* Sending collapses the composer: the conversation takes everything above the tabs except a narrow column on
+     its right, where scroll up, scroll down and **Reply** are stacked. Reply brings the word grid back; while composing in an
      ongoing conversation the left column is shared between Keyboard and a **Conversation** field that returns to
-     reading. Conversations opened from Recents start in reading mode.
+     reading, and the sidebar's free space shows the AI's **Last reply** for reference. Conversations opened from Recents start in reading mode.
   5. *Bottom navigation* switches between New Chat, Recents and Account (Account is a placeholder).
   6. *Recents* uses the same base grid: uncategorised chats in the left column, projects in the two right columns,
      three cards per column at compass-field height; when a list does not fit, its last slot becomes a dashed
@@ -184,6 +184,14 @@ Sources and tools this project builds on. Keep this list current when a new one 
 
 **Research / references**
 
+- Villaroman, N., Rowe, D., & Helps, R. (2013). *Design and evaluation of face tracking user interfaces for
+  accessibility.* Proceedings of the 2nd Annual Conference on Research in Information Technology (RIIT '13), 65–70.
+  ACM. https://doi.org/10.1145/2512209.2512218 — consumer-grade face tracking as cheap, non-intrusive input for
+  people who can't use a mouse and keyboard but can control their head. Its five stages of a face tracking UI map
+  onto this pipeline and structure the in-app **Technicalities** page (Account › Settings › More):
+  user input (head movement, face and head gestures) → capture technology (webcam, `getUserMedia`) → feature
+  retrieval (MediaPipe Face Landmarker) → feature processing (calibration, smoothing, dead zone, detectors, state
+  machine) → pointer behaviour (Grid Glide: magnetic grid, dwell to arm, gesture to confirm).
 - University of Minnesota CCAPS, *Common Writing Prompt Terms* —
   https://ccaps.umn.edu/esl-resources/students/writing/common-prompts — the common instruction verbs used in prompt
   writing (Explain, Summarize, Compare, Define, Outline, …); reviewed for the New Chat starter words.
