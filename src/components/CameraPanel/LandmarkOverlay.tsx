@@ -32,10 +32,15 @@ export function LandmarkOverlay({ className }: { className?: string }) {
       ctx.clearRect(0, 0, W, H);
       if (!frame || !frame.faceDetected) return;
 
-      // video is object-fit: contain → compute letterboxed rect
-      const ar = frame.imageWidth / Math.max(1, frame.imageHeight);
-      let vw = W, vh = W / ar, ox = 0, oy = (H - vh) / 2;
-      if (vh > H) { vh = H; vw = H * ar; ox = (W - vw) / 2; oy = 0; }
+      // Map normalized landmarks onto the rect the sibling <video> actually paints:
+      // object-fit: contain letterboxes (scale = min), cover crops (scale = max).
+      const video = parent?.querySelector("video");
+      const fit = video ? getComputedStyle(video).objectFit : "contain";
+      const iw = Math.max(1, frame.imageWidth);
+      const ih = Math.max(1, frame.imageHeight);
+      const scale = fit === "cover" ? Math.max(W / iw, H / ih) : Math.min(W / iw, H / ih);
+      const vw = iw * scale, vh = ih * scale;
+      const ox = (W - vw) / 2, oy = (H - vh) / 2;
       const px = (x: number) => ox + (mirror ? 1 - x : x) * vw;
       const py = (y: number) => oy + y * vh;
 
