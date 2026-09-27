@@ -1,4 +1,4 @@
-import type { InputEvent } from "@/events/types";
+import type { InputEvent, InputEventType } from "@/events/types";
 import type { Thresholds } from "@/config/thresholds";
 
 /** Which gesture toggles continuous head-driven scrolling on/off. */
@@ -26,7 +26,7 @@ export class ScrollToggleDetector {
   }
 
   /** Feed this frame's events; returns true the instant the configured gesture completes. */
-  observe(events: InputEvent[], t: number, th: Thresholds, gesture: ScrollToggleGesture): boolean {
+  observe(events: InputEvent[], t: number, th: Thresholds, gesture: ScrollToggleGesture | InputEventType): boolean {
     if (gesture !== "BLINK_BURST") return events.some((ev) => ev.type === gesture);
 
     let fired = false;

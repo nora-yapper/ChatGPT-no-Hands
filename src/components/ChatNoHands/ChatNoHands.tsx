@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { Camera, CameraOff, Crosshair, VenetianMask } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { Badge } from "@/components/shadcn/badge";
-import { Separator } from "@/components/shadcn/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/shadcn/tooltip";
 import { CalibrationOverlay } from "@/components/Calibration/CalibrationOverlay";
-import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 import { LandmarkOverlay } from "@/components/CameraPanel/LandmarkOverlay";
 import { useCameraTracking } from "@/pipeline/useCameraTracking";
 import { pipeline } from "@/pipeline/Pipeline";
@@ -21,12 +19,12 @@ import { fallbackPredictions, type Predictions } from "@/chat/predictionRules";
 import { buildPrompt, pushSegment, undoSegment, type Segment } from "@/chat/promptState";
 import { cn } from "@/lib/utils";
 import { NoHandsScreen } from "./NoHandsScreen";
-import { SidebarCloseButton, SidebarInterfaces, SidebarOpenButton, SidebarToggles, sidebarAction } from "./SidebarControls";
+import { SidebarCloseButton, SidebarInterfaces, SidebarOpenButton, SidebarThemeToggle, sidebarAction } from "./SidebarControls";
 import { TransitIndicator } from "./TransitIndicator";
 import { KeyboardModal } from "./KeyboardModal";
 import { RenameKeyboardModal } from "./RenameKeyboardModal";
 import { useHeadScrollTarget } from "./useHeadScroll";
-import type { ScrollToggleGesture } from "@/gestures/scrollToggleDetector";
+import { ACTIONS, commitConfirm, gestureLabel, profileFor, revertConfirm, shortcutFor } from "@/isnt/isntSettings";
 import type { Phase, Screen } from "./spatial";
 import { recents, type RecentChat } from "./recents/recentsStore";
 
@@ -56,12 +54,6 @@ const RENAME_TITLES: Record<RenameKind, string> = {
   "account-email": "Edit email",
 };
 
-const SCROLL_TOGGLE_HINT: Record<ScrollToggleGesture, string> = {
-  BROW_RAISE_BOTH: "Raise both eyebrows and hold for a beat",
-  MOUTH_HOLD: "Open your mouth and hold for a beat",
-  BLINK_BURST: "Blink fast three times",
-};
-
 function IconButton({ label, onClick, children, active, disabled, className }: { label: string; onClick?: () => void; children: React.ReactNode; active?: boolean; disabled?: boolean; className?: string }) {
   return (
     <Tooltip>
@@ -82,9 +74,9 @@ export default function ChatNoHands() {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const lab = useLab();
   const settings = useSettings();
+  const isnt = settings.isnt;
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // conversation
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -370,16 +362,62 @@ export default function ChatNoHands() {
         case "ACCOUNT_EDIT_EMAIL": setRenameTarget({ kind: "account-email", id: "", value: accountEmail }); break;
         case "LOG_OUT": break; // not part of this prototype
         default:
-          sidebarAction(action, target, { setSidebarOpen, toggleTheme, toggleSettings: () => setSettingsOpen((o) => !o), navigate: (href) => router.push(href), newChat });
+          sidebarAction(action, target, { setSidebarOpen, toggleTheme, navigate: (href) => router.push(href), newChat });
       }
       if (target) setLastFlash((f) => ({ ...f, [target.id]: timestamp }));
     },
     [pick, undo, send, closeKeyboard, closeRename, newChat, accountName, accountEmail, toggleTheme, router],
   );
 
-  const handleAction = useCallback((a: ActionEvent) => act(a.target, a.action, a.timestamp), [act]);
+  const handleAction = useCallback(
+    (a: ActionEvent) => {
+      // a trialled confirmation gesture that just confirmed something has proven it works — keep it
+      const s = settingsStore.get().isnt;
+      if (s.confirmTrial && a.reason.triggerEvent === s.confirm) settingsStore.set({ isnt: commitConfirm(s) });
+      act(a.target, a.action, a.timestamp);
+    },
+    [act],
+  );
   useEffect(() => pipeline.dispatcher.register(handleAction), [handleAction]);
   const onActivate = useCallback((t: FocusTarget) => act(t, t.action), [act]);
+
+  // ── ISNT settings (Account › Settings) ──
+  // its tuning and bindings are laid over the lab settings only while ISNT is open
+  useEffect(() => {
+    pipeline.setProfile(profileFor(isnt));
+  }, [isnt]);
+  useEffect(() => () => pipeline.setProfile(null), []);
+
+  // gesture shortcuts: a shortcut does exactly what arming its button would — so it runs that button's own
+  // target, and only while the button is registered (enabled and on screen). Head scroll's toggle is handled
+  // by the pipeline itself; incognito has no head-focusable button, so it runs directly.
+  const shortcutRef = useRef({ act, toggleIncognito });
+  useEffect(() => { shortcutRef.current = { act, toggleIncognito }; });
+  useEffect(
+    () =>
+      pipeline.bus.subscribe((e) => {
+        const shortcut = shortcutFor(settingsStore.get().isnt, e.type);
+        if (!shortcut) return;
+        if (shortcut === "INCOGNITO") { shortcutRef.current.toggleIncognito(); return; }
+        const id = ACTIONS.find((a) => a.id === shortcut)?.targetId;
+        const target = id ? pipeline.focus.getTarget(id) : null;
+        if (target) shortcutRef.current.act(target, target.action);
+      }),
+    [],
+  );
+
+  // a just-changed confirmation gesture reverts on its own unless it confirms something in time (no lock-out)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isnt.confirmTrial) return;
+    const tick = setInterval(() => {
+      setNow(Date.now());
+      const s = settingsStore.get().isnt;
+      if (s.confirmTrial && Date.now() >= s.confirmTrial.deadline) settingsStore.set({ isnt: revertConfirm(s) });
+    }, 250);
+    return () => clearInterval(tick);
+  }, [isnt.confirmTrial]);
+  const trialLeft = isnt.confirmTrial ? Math.max(0, Math.ceil((isnt.confirmTrial.deadline - now) / 1000)) : 0;
 
   // physical keyboard: opens the keyboard escape hatch and types into it (testing / accessibility fallback)
   useEffect(() => {
@@ -467,7 +505,7 @@ export default function ChatNoHands() {
               </div>
               {cameraProblem && <div className="mt-2 px-1 text-[11px] leading-snug text-destructive">{lab.camera.message}</div>}
             </div>
-            <SidebarToggles theme={theme} settingsOpen={settingsOpen} enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
+            <SidebarThemeToggle theme={theme} enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
           </div>
         </aside>
 
@@ -485,6 +523,11 @@ export default function ChatNoHands() {
               )}
               {incognito && (
                 <Badge variant="outline" className="h-7 rounded-full border-border px-2.5 text-xs font-normal text-muted-foreground">Temporary chat — not saved</Badge>
+              )}
+              {isnt.confirmTrial && (
+                <Badge variant="outline" className="h-7 rounded-full border-foreground/40 px-2.5 text-xs font-normal text-foreground" role="status">
+                  Confirm with “{gestureLabel(isnt.confirm)}” to keep it · back to “{gestureLabel(isnt.confirmTrial.previous)}” in {trialLeft}s
+                </Badge>
               )}
               {lab.headScroll.active && (
                 <Badge variant="outline" className="h-7 gap-1.5 rounded-full border-border px-2.5 text-xs font-normal text-muted-foreground">
@@ -523,7 +566,7 @@ export default function ChatNoHands() {
             expanded={expanded}
             enabled={headEnabled}
             areaRef={rootRef}
-            areaKey={`${sidebarOpen}|${settingsOpen}|${theme}`}
+            areaKey={`${sidebarOpen}|${theme}`}
             lastFlash={lastFlash}
             onActivate={onActivate}
             mode={hasTranscript && !composing ? "read" : "compose"}
@@ -541,23 +584,13 @@ export default function ChatNoHands() {
           <p className="shrink-0 pb-6 text-center text-xs text-muted-foreground">
             {camOn && !settings.calibration
               ? "Not calibrated — press Calibrate in the sidebar for accurate head pointing."
-              : `Move your head to glide, stop on a field to focus it, then long‑blink or nod to confirm. ${SCROLL_TOGGLE_HINT[settings.scrollToggleGesture]} to toggle head-tilt scrolling. Camera frames never leave this browser.`}
+              : `Move your head to glide, stop on a field to focus it, then ${gestureLabel(isnt.confirm).toLowerCase()} to confirm.${isnt.shortcuts.SCROLL_TOGGLE ? ` ${gestureLabel(isnt.shortcuts.SCROLL_TOGGLE)} toggles head-tilt scrolling.` : ""} Gestures and shortcuts: Account › Settings. Camera frames never leave this browser.`}
           </p>
 
           {keyboardOpen && <KeyboardModal buffer={kbBuffer} prompt={prompt} lastFlash={lastFlash} onActivate={onActivate} />}
           {renameTarget && <RenameKeyboardModal title={RENAME_TITLES[renameTarget.kind]} value={renameTarget.value} lastFlash={lastFlash} onActivate={onActivate} />}
         </main>
 
-        {settingsOpen && (
-          <aside className="w-80 shrink-0 overflow-auto border-l border-border bg-lab-panel p-3 text-lab-fg" style={{ colorScheme: "dark", ["--lab-accent" as string]: "#22d3ee", ["--lab-border" as string]: "#22303c" }}>
-            <div className="mb-2 flex items-center justify-between">
-              <div className="font-mono text-[11px] font-semibold tracking-[0.18em] text-lab-dim">SETTINGS · live</div>
-              <button onClick={() => setSettingsOpen(false)} className="font-mono text-[11px] text-lab-dim hover:text-lab-fg">CLOSE</button>
-            </div>
-            <Separator className="mb-2 bg-lab-border" />
-            <SettingsPanel />
-          </aside>
-        )}
         <CalibrationOverlay />
       </div>
     </TooltipProvider>

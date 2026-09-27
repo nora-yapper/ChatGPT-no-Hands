@@ -31,6 +31,10 @@ export interface Thresholds {
   browRaiseThreshold: number;
   browMinMs: number;
 
+  // held head-pose gestures (turn / tilt / roll), used as ISNT shortcuts
+  headGestureThreshold: number; // fraction of the head range (0..1) the head must pass on one axis
+  headGestureHoldMs: number; // …and stay past it this long
+
   // look away / tracking
   lookAwayThreshold: number;
   lookAwayMs: number;
@@ -99,6 +103,9 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
 
   browRaiseThreshold: 0.5,
   browMinMs: 300,
+
+  headGestureThreshold: 0.85,
+  headGestureHoldMs: 400,
 
   lookAwayThreshold: 0.85,
   lookAwayMs: 400,

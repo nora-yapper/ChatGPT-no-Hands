@@ -23,8 +23,17 @@ export const GESTURE_EVENT_TYPES: GestureEventType[] = [
   "LOOK_AWAY",
 ];
 
+/**
+ * Held head-pose gestures (see HeadPoseGestureDetector). Deliberately *not* GestureEventTypes: they are never
+ * bound to interaction intents (so the lab's bindings are unchanged) — ISNT uses them only as shortcuts.
+ * Left / right are the user's own (TURN_LEFT = turning toward your left shoulder side).
+ */
+export type HeadPoseGestureType = "TURN_LEFT" | "TURN_RIGHT" | "TILT_UP" | "TILT_DOWN" | "ROLL_LEFT" | "ROLL_RIGHT";
+export const HEAD_POSE_GESTURE_TYPES: HeadPoseGestureType[] = ["TURN_LEFT", "TURN_RIGHT", "TILT_UP", "TILT_DOWN", "ROLL_LEFT", "ROLL_RIGHT"];
+
 export type InputEventType =
   | GestureEventType
+  | HeadPoseGestureType
   | "GAZE_ENTER"
   | "GAZE_EXIT"
   | "GAZE_HOLD"

@@ -4,6 +4,7 @@ import { DEFAULT_BINDINGS, type GestureBindings } from "@/config/bindings";
 import type { FocusMode } from "@/types/interaction";
 import type { CalibrationBaseline } from "@/types/signals";
 import type { ScrollToggleGesture } from "@/gestures/scrollToggleDetector";
+import { DEFAULT_ISNT, sanitize as sanitizeIsnt, type IsntSettings } from "@/isnt/isntSettings";
 
 export interface Settings {
   thresholds: Thresholds;
@@ -18,6 +19,8 @@ export interface Settings {
   showRaw: boolean;
   maxEvents: number;
   calibration: CalibrationBaseline | null;
+  /** ISNT's own simplified settings — never read by the Input Lab; the pipeline sees them only as ISNT's profile */
+  isnt: IsntSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showRaw: false,
   maxEvents: 500,
   calibration: null,
+  isnt: DEFAULT_ISNT,
 };
 
 const STORAGE_KEY = "input-lab.settings.v1";
@@ -48,6 +52,7 @@ function load(): Settings {
       thresholds: { ...DEFAULT_THRESHOLDS, ...(parsed.thresholds ?? {}) },
       smoothing: { ...DEFAULT_SMOOTHING, ...(parsed.smoothing ?? {}) },
       bindings: { ...DEFAULT_BINDINGS, ...(parsed.bindings ?? {}) },
+      isnt: sanitizeIsnt(parsed.isnt),
     };
   } catch {
     return DEFAULT_SETTINGS;

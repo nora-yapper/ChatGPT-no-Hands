@@ -1,6 +1,6 @@
 "use client";
 
-import { FlaskConical, MessageSquare, Moon, PanelLeft, Settings2, Sun } from "lucide-react";
+import { FlaskConical, MessageSquare, Moon, PanelLeft, Sun } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
 import type { FocusTarget } from "@/types/interaction";
@@ -25,7 +25,6 @@ const INTERFACES: Array<{ id: InterfaceId; label: string; href: string; icon: Re
 const SB_CLOSE: FocusTarget = { id: "sb-close", kind: "button", label: "Close sidebar", action: "SB_CLOSE" };
 const SB_OPEN: FocusTarget = { id: "sb-open", kind: "button", label: "Open sidebar", action: "SB_OPEN" };
 const SB_THEME: FocusTarget = { id: "sb-theme", kind: "button", label: "Toggle light / dark mode", action: "SB_THEME" };
-const SB_SETTINGS: FocusTarget = { id: "sb-settings", kind: "button", label: "Interaction settings", action: "SB_SETTINGS" };
 /** the current interface's entry starts a new chat there (as the old sidebar did); the others navigate */
 const interfaceTarget = (i: (typeof INTERFACES)[number], current: InterfaceId): FocusTarget =>
   i.id === current
@@ -35,7 +34,6 @@ const interfaceTarget = (i: (typeof INTERFACES)[number], current: InterfaceId): 
 export interface SidebarHandlers {
   setSidebarOpen: (open: boolean) => void;
   toggleTheme: () => void;
-  toggleSettings: () => void;
   navigate: (href: string) => void;
   newChat: () => void;
 }
@@ -46,7 +44,6 @@ export function sidebarAction(action: string, target: FocusTarget | null, h: Sid
     case "SB_CLOSE": h.setSidebarOpen(false); return true;
     case "SB_OPEN": h.setSidebarOpen(true); return true;
     case "SB_THEME": h.toggleTheme(); return true;
-    case "SB_SETTINGS": h.toggleSettings(); return true;
     case "SB_GO": h.navigate(target?.payload?.href as string); return true;
     case "SB_NEW_CHAT": h.newChat(); return true;
     default: return false;
@@ -98,20 +95,13 @@ export function SidebarInterfaces({ current, ...p }: Common & { current: Interfa
   );
 }
 
-/** light/dark toggle and the interaction-settings panel toggle, side by side at the bottom of the sidebar */
-export function SidebarToggles({ theme, settingsOpen, ...p }: Common & { theme: "light" | "dark"; settingsOpen: boolean }) {
+/** the light/dark toggle at the bottom of the sidebar */
+export function SidebarThemeToggle({ theme, ...p }: Common & { theme: "light" | "dark" }) {
   return (
-    <div className="mt-2 grid grid-cols-2 gap-2">
-      <ChatFocusable target={SB_THEME} enabled={p.enabled} flashKey={p.lastFlash[SB_THEME.id]} radius="rounded-xl" onActivate={p.onActivate}>
-        <button type="button" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm hover:bg-accent">
-          {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />} {theme === "dark" ? "Light" : "Dark"}
-        </button>
-      </ChatFocusable>
-      <ChatFocusable target={SB_SETTINGS} enabled={p.enabled} flashKey={p.lastFlash[SB_SETTINGS.id]} radius="rounded-xl" onActivate={p.onActivate}>
-        <button type="button" aria-pressed={settingsOpen} className={cn("flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm hover:bg-accent", settingsOpen && "bg-accent")}>
-          <Settings2 className="size-5" /> Settings
-        </button>
-      </ChatFocusable>
-    </div>
+    <ChatFocusable target={SB_THEME} enabled={p.enabled} flashKey={p.lastFlash[SB_THEME.id]} radius="rounded-xl" className="mt-2" onActivate={p.onActivate}>
+      <button type="button" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm hover:bg-accent">
+        {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />} {theme === "dark" ? "Light mode" : "Dark mode"}
+      </button>
+    </ChatFocusable>
   );
 }

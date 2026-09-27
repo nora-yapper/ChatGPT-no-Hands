@@ -1,6 +1,8 @@
 import type { TrackingFrame, TrackingProvider } from "@/types/tracking";
 import type { Signals, CalibrationBaseline } from "@/types/signals";
-import type { InputEvent } from "@/events/types";
+import type { InputEvent, InputEventType } from "@/events/types";
+import type { IsntProfile } from "@/isnt/isntSettings";
+import type { ScrollToggleGesture } from "@/gestures/scrollToggleDetector";
 import { EventBus } from "@/events/eventBus";
 import { normalizeSignals } from "@/signals/normalizeSignals";
 import { SignalSmoother } from "@/signals/smoothSignals";
@@ -13,6 +15,7 @@ import { HeadGestureDetector } from "@/gestures/headGestureDetector";
 import { MouthDetector } from "@/gestures/mouthDetector";
 import { EyebrowDetector } from "@/gestures/eyebrowDetector";
 import { LookAwayDetector } from "@/gestures/lookAwayDetector";
+import { HeadPoseGestureDetector } from "@/gestures/headPoseGestureDetector";
 import { HeadStepDetector, type StepDirection } from "@/gestures/headStepDetector";
 import { GazeDetector } from "@/gestures/gazeDetector";
 import { ScrollToggleDetector } from "@/gestures/scrollToggleDetector";
@@ -39,6 +42,8 @@ export class Pipeline {
   readonly headScroll = new HeadScrollController();
 
   private smoother = new SignalSmoother();
+  /** an interface's own tuning (ISNT), laid over the lab settings while that interface is open */
+  private profile: IsntProfile | null = null;
   private headPose = new StableHeadPose();
   private quality = new TrackingQualityEstimator();
   private detectors: Detector[] = [
@@ -48,6 +53,7 @@ export class Pipeline {
     new MouthDetector(),
     new EyebrowDetector(),
     new LookAwayDetector(),
+    new HeadPoseGestureDetector(),
   ];
   private headStep = new HeadStepDetector();
   private gaze = new GazeDetector();
@@ -108,6 +114,27 @@ export class Pipeline {
     this.store.update({ calibration: { active: false, progress: 0, samples: 0 } });
   }
 
+  /**
+   * Overlay an interface's own tuning on the lab settings (null = lab settings only). ISNT sets it while it is
+   * open, so its simplified settings never overwrite what the Input Lab shows.
+   */
+  setProfile(profile: IsntProfile | null) {
+    this.profile = profile;
+  }
+
+  /** the lab settings with the active profile (if any) laid over them — what every stage below runs on */
+  private effective() {
+    const settings = settingsStore.get();
+    const p = this.profile;
+    return {
+      settings,
+      th: p ? { ...settings.thresholds, ...p.thresholds } : settings.thresholds,
+      smoothing: p ? { ...settings.smoothing, ...p.smoothing } : settings.smoothing,
+      bindings: p ? p.bindings : settings.bindings,
+      scrollToggle: (p ? p.scrollToggle : settings.scrollToggleGesture) as ScrollToggleGesture | InputEventType | null,
+    };
+  }
+
   private baseline(): CalibrationBaseline {
     return settingsStore.get().calibration ?? DEFAULT_BASELINE;
   }
@@ -115,8 +142,7 @@ export class Pipeline {
   // ------------------------------------------------------------------ frames
   handleFrame(frame: TrackingFrame) {
     if (this.paused) return;
-    const settings = settingsStore.get();
-    const th = settings.thresholds;
+    const { th, smoothing } = this.effective();
     const t = frame.timestamp;
 
     // fps
@@ -169,7 +195,7 @@ export class Pipeline {
     const raw0 = normalizeSignals(frame, this.baseline(), th);
     // treat a short dropout as still tracking (hold last smoothed values) but never as a fresh frame
     const raw = computePointer(raw0, th);
-    const smoothed = computePointer(this.smoother.update(raw0, settings.smoothing), th);
+    const smoothed = computePointer(this.smoother.update(raw0, smoothing), th);
 
     this.store.update({
       frame,
@@ -185,26 +211,28 @@ export class Pipeline {
 
   /** Runs gesture + interaction layers on already-normalized signals (used by live frames and replay). */
   processSignals(raw: Signals, smoothed: Signals, qualityOverall: number, t: number) {
-    const settings = settingsStore.get();
-    const th = settings.thresholds;
+    const { settings, th, bindings, scrollToggle } = this.effective();
     const tracking = smoothed.tracking && !this.trackingLost;
     const ctx = { thresholds: th, quality: this.store.latest.quality };
 
     // gesture detectors (always consume smoothed signals)
     const frameEvents: InputEvent[] = [];
     for (const d of this.detectors) {
-      for (const e of d.update({ ...smoothed, tracking }, ctx)) frameEvents.push(this.bus.emit(e));
+      for (const e of d.update({ ...smoothed, tracking }, ctx)) {
+        // while head scroll is on, tilting the head *is* scrolling — not a tilt gesture
+        if ((e.type === "TILT_UP" || e.type === "TILT_DOWN") && this.headScroll.isActive()) continue;
+        frameEvents.push(this.bus.emit(e));
+      }
     }
 
     // head scroll: the configured gesture (settings.scrollToggleGesture) toggles it on/off; while on, head
     // pitch drives whatever scrollable surface the GUI has registered. Entirely independent of focus/confirm
     // — it never touches the FSM.
     // a gesture bound to an interaction intent (e.g. brows → CONFIRM) can't also toggle scrolling, or one raise would do both
-    const toggleGesture = settings.scrollToggleGesture;
-    const toggleFree = (settings.bindings[toggleGesture as keyof typeof settings.bindings] ?? "NONE") === "NONE";
-    if (toggleFree && this.scrollToggle.observe(frameEvents, t, th, toggleGesture)) {
+    const toggleFree = !!scrollToggle && (bindings[scrollToggle as keyof typeof bindings] ?? "NONE") === "NONE";
+    if (toggleFree && this.scrollToggle.observe(frameEvents, t, th, scrollToggle)) {
       const active = this.headScroll.toggle();
-      this.bus.emit({ type: "SCROLL_MODE_TOGGLE", timestamp: t, confidence: 1, source: "eyes", metadata: { active, gesture: settings.scrollToggleGesture } });
+      this.bus.emit({ type: "SCROLL_MODE_TOGGLE", timestamp: t, confidence: 1, source: "eyes", metadata: { active, gesture: scrollToggle } });
     }
     this.headScroll.update({ ...smoothed, tracking }, t, th);
 
@@ -249,7 +277,7 @@ export class Pipeline {
 
     // interaction state machine
     const focusTarget = this.focus.getTarget(focusId);
-    const result = this.fsm.update({ t, tracking, focus: focusTarget, pointerMoving, events: frameEvents, thresholds: th, bindings: settings.bindings });
+    const result = this.fsm.update({ t, tracking, focus: focusTarget, pointerMoving, events: frameEvents, thresholds: th, bindings });
     for (const e of result.events) this.bus.emit(e);
     for (const a of result.actions) this.dispatcher.dispatch(a);
 

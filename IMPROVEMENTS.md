@@ -200,3 +200,134 @@ For each issue: type check, lint and the test suite, plus a look at the running 
 - **Stale cache:** the type check's only error is the stale `.next/types/validator.ts` still listing the old route. It's generated build output and regenerates on the next dev-server restart or `next build`.
 - **Settled:** the flagged "ChatGPT *Keyboard Chat*" header decision from issue 7 no longer applies.
 
+
+---
+
+## 9. [x] Feature: ISNT settings in Account
+
+> Account gets a two-part layout: profile on the left, ISNT's own simplified settings on the right. Input Lab settings stay exactly as they are. The ISNT settings cover gesture shortcuts, a simplified set of sensitivity and tracking controls, a UI that works fully by head (steppers and option tiles, never sliders or dropdowns), safety bounds so no setting can lock the user out, and a plain-language explanation for every item.
+
+### Analysis
+
+- **Where settings live today.** `settingsStore` holds one set of `thresholds` (47 parameters, `config/thresholds.ts`), `smoothing`, `bindings` (gesture → intent) and `scrollToggleGesture`. The Input Lab's `SettingsPanel` edits all of it with sliders, and ISNT currently opens that same panel from the sidebar. The pipeline reads the store on every frame.
+- **Gestures that exist.** `BLINK`, `LONG_BLINK`, `NOD`, `HEAD_SHAKE`, `MOUTH_OPEN` / `MOUTH_HOLD`, `BROW_RAISE_LEFT` / `RIGHT` / `BOTH`, `LOOK_AWAY` (yaw *or* pitch far from center), and `HEAD_STEP` (discrete navigation, only in "discrete" focus mode). There is no held turn/tilt gesture per direction, and nothing for roll.
+- **How actions run.** The FSM turns a *bound* gesture into CONFIRM or CANCEL on an armed target, and dispatches `ActionEvent`s that ISNT's `act()` executes. The on-screen buttons are `ChatFocusable` targets, registered with the focus manager only while they're enabled and visible.
+
+### Design decisions
+
+- **Separate ISNT profile, overlaid only while ISNT is open.**
+  - `settingsStore` gets a new, separately persisted `isnt` object: the confirmation gesture, the shortcut map, and one step index per simplified control.
+  - `isnt/isntSettings.ts` derives a *profile* from it: partial thresholds, partial smoothing, bindings and the scroll-toggle gesture.
+  - ISNT calls `pipeline.setProfile(profile)` on mount and whenever `isnt` changes, and `setProfile(null)` on unmount. That's the same pattern it already uses for `focusMode`.
+  - The pipeline reads *effective* settings (lab store plus profile).
+  - Result: Input Lab's own values and its panel are untouched.
+- **Sidebar "Settings" in ISNT opens Account › Settings,** instead of the lab slider panel. Inside ISNT that panel would be misleading, because the ISNT profile overrides the values it shows. Input Lab keeps its panel.
+- **New head-pose gestures** (`HeadPoseGestureDetector`):
+  - `TURN_LEFT` / `TURN_RIGHT` (yaw), `TILT_UP` / `TILT_DOWN` (pitch), `ROLL_LEFT` / `ROLL_RIGHT` (head toward a shoulder).
+  - Each fires once when the head is held past a threshold, as a fraction of head range, for a hold time. It re-arms only after returning near center, and only the dominant axis counts.
+  - They're new `InputEventType`s but **not** `GestureEventType`s, so the lab's binding list and the FSM are unchanged. They're only ever used as ISNT shortcuts.
+  - Tilt events are ignored while head scroll is active, because tilting *is* scrolling then.
+  - They run in every interface (cheap). Only ISNT listens.
+- **Excluded, as requested:** nod, single-eyebrow raises and eye blend. Head shake isn't offered either: it's a yaw oscillation that would collide with the turn gestures.
+- **Confirmation gesture:** face gestures only (open mouth, raise both eyebrows, long blink). A head gesture moves the pointer off the armed button, so it can't confirm it.
+- **Shortcuts do exactly what the button does.** Each shortcut names the on-screen button's target id. When its gesture fires, ISNT looks the target up in the focus manager. It runs `act(target, target.action)`, with the same flash, only if that button is currently registered, i.e. enabled and on screen. So Send does nothing when there's nothing to send, and Open Keyboard does nothing on Recents: the same rules as pointing at the button.
+  - Incognito's header button isn't a head target, so its shortcut toggles incognito directly.
+  - "Toggle head scroll" is also listed as a shortcut, because it *is* one (it was a separate lab setting). That brings it into the same conflict rules.
+
+### Shortcut actions and default presets
+
+| Action | What it does (on-screen equivalent) | Preset A: "Mouth confirms" (default) | Preset B: "Eyebrows confirm" |
+|---|---|---|---|
+| **Confirm** (required) | confirms the armed button | Open mouth | Raise both eyebrows |
+| Toggle head scroll | turns head-tilt scrolling on/off | Raise both eyebrows | Open mouth |
+| Go to Account | Account tab | Long blink | Long blink |
+| Go back | the Back button (undo last word) | Head to left shoulder | Head to left shoulder |
+| Send | the Send button | Head to right shoulder | Head to right shoulder |
+| New chat | the New chat tab | — | — |
+| Open keyboard | the Keyboard button | — | — |
+| Toggle incognito | the temporary-chat toggle | — | — |
+
+- **Roll for the defaults:** rolling the head doesn't move the Grid Glide pointer (it uses yaw and pitch), so it's the one head gesture that never disturbs pointing.
+- **Turn and tilt:** offered, but unassigned by default. They push the pointer to an edge.
+
+**Assignable gestures:** Open mouth · Raise both eyebrows · Long blink · Turn head left · Turn head right · Tilt head up · Tilt head down · Head to left shoulder · Head to right shoulder.
+
+**Conflict rules** (enforced when assigning, and re-validated on load):
+- One gesture maps to at most one action, including Confirm and Toggle head scroll.
+- Assigning a gesture that's already in use moves it: the old action becomes unassigned, and a note says so.
+- The Confirm gesture can't be chosen for a shortcut: its tile is shown as "used to confirm" and can't be selected.
+- Confirm can never be unassigned.
+
+### Sensitivity and tracking: from 47 parameters to 9 controls
+
+Every control is a stepper (− / +) over a fixed list of safe steps. Each step sets one or more underlying parameters. Every step is within bounds, so no combination can stop the pointer.
+
+| Group | Control | Plain explanation (shown in UI) | Parameters it sets | Steps (default **bold**) |
+|---|---|---|---|---|
+| Pointer movement | **Pointer speed** | How far the pointer moves for a head movement. Raise it if you have to turn a lot; lower it if the pointer overshoots. | `gridSensitivity` | 0.45, 0.6, 0.75, **0.9**, 1.1, 1.3, 1.55, 1.8 |
+| | **Steadiness** | How much small, shaky head movement is ignored. Raise it if the pointer jitters or slips off buttons; lower it if it feels sluggish. | `gridDeadZone` (head-speed dead zone) + `gridHysteresis` (pull of the current button) + `smoothing.head` | 5 steps, **3rd** = 0.25 / 0.40 / 0.35 (current defaults); dead zone at most 0.45 |
+| | **Hold to arm** | How long you keep the pointer still on a button before it's ready to confirm. | `gazeHoldMs` | 300, 400, **500**, 650, 800, 1000, 1300 ms |
+| Head range | **Head range** | How far you turn your head to go across the screen. Lower it if turning is uncomfortable; raise it if the pointer is too jumpy. | `headYawRangeDeg` (pitch = 0.75×, roll = 1.25× of it) | 12, 14, 16, 18, **20**, 23, 26, 30 ° |
+| | **Flip left / right**, **Flip up / down** | Reverse a direction if the pointer moves the wrong way. | `invertYaw`, `invertPitch` | off / on (default off) |
+| Head scroll | **Scroll speed** | How fast the page scrolls when you tilt all the way. | `scrollMaxSpeed` + `scrollPageIntervalMs` (inversely) | 5 steps, **3rd** = 900 px/s / 220 ms |
+| | **Scroll start** | How far you tilt before scrolling starts. Raise it if pages scroll when you don't mean them to. | `scrollDeadzone` | 0.06, 0.09, **0.12**, 0.16, 0.20, 0.25 |
+| Gestures | **Gesture strength** | How big a face or head gesture must be to count. Lower it if gestures are missed; raise it if they fire by accident. | `mouthOpenThreshold` + `browRaiseThreshold` + `headGestureThreshold` | 5 steps, **3rd** = 0.45 / 0.50 / 0.85 |
+| | **Gesture hold** | How long you hold a gesture before it counts. | `mouthHoldMs`, `browMinMs`, `longBlinkMs`, `headGestureHoldMs` × factor | ×0.6, ×0.8, **×1**, ×1.3, ×1.6 (long blink stays ≥ 360 ms, above a natural blink) |
+
+**Dropped or hidden in ISNT** (still in the Input Lab):
+- **Pointer / discrete focus modes only:** focus stability and window, navigating velocity, pointer gain X/Y, step threshold and repeat. ISNT always uses Grid Glide.
+- **Unused gestures:** nod, shake, refractory, start-from-center tolerance, look-away (threshold, duration), blinks to toggle and blink burst window (blink burst isn't offered), single brows.
+- **Too technical, safe defaults kept:** eye-closed threshold, blink min, long blink max, speech guard, tracking-lost delay, arm grace, cooldown, settle time and settle velocity, speed curve, acceleration, smoothing for pointer/face, grid input mode, eye blend.
+
+### Safety: no deadlocks
+
+1. **Bounded steps.** No control can go outside its step list. The steps are chosen so the pointer always moves: the dead zone is ≤ 0.45 head-units/s, the head range is 12–30°, and hold to arm is ≤ 1.3 s. Stored values are clamped on load too.
+2. **The confirmation gesture is trialled.** After changing Confirm, a banner asks you to confirm anything with the *new* gesture within 20 s. If that doesn't happen, it reverts automatically. The trial survives a reload, and an expired trial reverts on load. So picking a gesture your face or camera can't produce can't lock you out.
+3. **Reset.** A large "Reset ISNT settings" tile sits on the Movement tab. The gesture tab has the presets, which are always valid. Mouse and keyboard keep working throughout.
+4. **Conflicts are impossible by construction** (see the rules above). Confirm always exists.
+
+### Account layout (head-navigable)
+
+- **Left third:** the profile, unchanged.
+- **Right two thirds:** a settings panel with two big tabs, **Gestures** | **Movement**. No scrolling.
+- **Gestures tab:**
+  - Eight action tiles (Confirm plus seven shortcuts) in a 2×4 grid. Each shows the action, its gesture and a one-line explanation.
+  - Selecting a tile opens a chooser over the panel, like the Recents menu: nine gesture tiles, each with a one-line explanation, plus "None" (not for Confirm) and "Close". Gestures already in use are marked, and the Confirm gesture is disabled for shortcuts.
+  - A row at the bottom holds the two presets.
+- **Movement tab:** the 9 controls as rows (label, explanation, value, big − and + buttons), grouped under small headings, plus the Reset tile.
+- **Everything is a `ChatFocusable`,** with the same focus, arming and flash as the rest of the app. Actions are `IS_*`, handled by the panel itself for both head and mouse (the Recents pattern).
+
+### Files
+
+`isnt/isntSettings.ts` (new: catalogs, presets, validation, profile derivation, unit tests) · `gestures/headPoseGestureDetector.ts` (new, with tests) · `events/types.ts` · `config/thresholds.ts` (two new parameters, not added to the lab's slider list) · `store/settingsStore.ts` (`isnt`) · `gestures/scrollToggleDetector.ts` (accepts any gesture) · `pipeline/Pipeline.ts` (profile overlay, detector, tilt suppression while scrolling) · `ChatNoHands.tsx` (profile, shortcuts, confirm trial, hints, sidebar Settings) · `AccountScreen.tsx` and `IsntSettingsPanel.tsx` (new).
+
+### Done
+
+Implemented as planned. The Input Lab's settings and panel are unchanged (no diff in `components/Settings`).
+
+- **New files:**
+  - `isnt/isntSettings.ts`: catalogs, presets, conflict rules, confirm trial, safe steps, profile. 11 unit tests.
+  - `gestures/headPoseGestureDetector.ts`: turn, tilt and roll, held. 5 unit tests.
+  - `components/ChatNoHands/IsntSettingsPanel.tsx`.
+- **Changed:** `settingsStore` (`isnt`, sanitized on load) · `Pipeline` (`setProfile` / `effective()`, tilt gestures ignored while head scroll is on, the scroll toggle accepts any gesture) · `ChatNoHands` (profile on mount / clear on unmount, shortcuts, trial banner and auto-revert, footer hint generated from the chosen gestures, sidebar Settings → Account) · `AccountScreen` (profile | settings).
+- **Deviation from the plan, explanations:** each tile shows its label and current value. The full plain-language explanation appears in a strip at the bottom of the panel, for whatever is being pointed at (head focus or mouse hover). Putting 3–4 lines of explanation on every stepper would have forced scrolling. Notices (a gesture moved here from another action, the trial started, the preset applied, the reset done) take over the strip for 8 s.
+- **Dark mode:** the panel sits on the page background rather than `bg-card`. In dark mode the card surface is the same `#2f2f2f` as the secondary tiles, which made them invisible.
+- **Checked in the browser:**
+  - A fired `LONG_BLINK` switches to Account.
+  - `ROLL_LEFT` (Back) does nothing when there's nothing to undo, because the Back button isn't registered.
+  - The confirm gesture doesn't act as a shortcut.
+  - Pointer speed tops out at step 8, where the + tile disables; the pipeline runs `gridSensitivity` 1.8 while the lab's own value stays 0.9; Reset goes back to 0.9.
+  - Assigning Long blink to New chat moves it from Go to Account, with a notice.
+  - A new confirm gesture shows the countdown badge and binds only that gesture in the FSM. It reverts when the trial expires, and is kept when it actually confirms a button.
+  - Leaving for the Input Lab clears the profile (the lab's `LONG_BLINK → CONFIRM` is back).
+  - Screenshots of both tabs and the chooser in light and dark mode.
+  - Lint is clean; 92 tests pass.
+- **Not checked:** real gestures can't be exercised without a camera, so the gesture events were injected on the bus.
+- **Noticed, not changed:** the "Free plan" badge on the profile card is invisible in dark mode (secondary on card, the same colour clash). It predates this work.
+
+### Follow-up: Settings removed from the sidebar
+
+- **Change:** the sidebar's Settings tile is gone, in favour of Account › Settings. It had become a shortcut there anyway, and the lab slider panel had already moved out of ISNT.
+- **Code:** removed `SB_SETTINGS` and the `toggleSettings` handler from `SidebarControls.tsx`. `SidebarToggles` became `SidebarThemeToggle`, one full-width "Dark mode" / "Light mode" tile.
+- **Checked:** the sidebar fields are now `sb-close`, `sb-go-lab`, `sb-go-chat` and `sb-theme`, and the theme tile still switches the theme. Lint is clean; 92 tests pass.
+

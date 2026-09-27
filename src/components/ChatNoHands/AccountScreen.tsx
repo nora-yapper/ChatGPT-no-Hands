@@ -6,13 +6,14 @@ import { Badge } from "@/components/shadcn/badge";
 import type { FocusTarget } from "@/types/interaction";
 import { cn } from "@/lib/utils";
 import { ChatFocusable } from "./ChatFocusable";
+import { IsntSettingsPanel } from "./IsntSettingsPanel";
 import { BASE_COLS, tint, type Span } from "./spatial";
 
 /* ───────────── placement on the shared base grid ─────────────
- * Same block as Recents: three columns across the full width (profile | · | ·). Only the left third is
- * designed so far — the profile card, as tall as the block above the nav row. */
-const COL_SPANS = ["1 / 9", "9 / 17", `17 / ${BASE_COLS + 1}`];
-const PROFILE_SPAN: Span = { col: COL_SPANS[0], row: "1 / 15" };
+ * Same block as Recents, as tall as the block above the nav row: the profile card in the left third, ISNT's
+ * own settings in the right two thirds. */
+const PROFILE_SPAN: Span = { col: "1 / 9", row: "1 / 15" };
+const SETTINGS_SPAN: Span = { col: `9 / ${BASE_COLS + 1}`, row: "1 / 15" };
 /** the avatar's pastel, fixed rather than derived from a prompt choice like the compass fields */
 const AVATAR_TINT = 6; // periwinkle
 
@@ -32,26 +33,29 @@ export interface AccountScreenProps {
 
 /**
  * Account: the left third is the profile section — a big pastel avatar, identity, plan, and Log out
- * anchored to the bottom of the card. The remaining two thirds are reserved for settings not designed yet.
+ * anchored to the bottom of the card. The right two thirds are ISNT's settings (gestures and movement).
  */
 export function AccountScreen({ enabled, lastFlash, onActivate, name, email }: AccountScreenProps) {
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
   return (
-    <div className="flex min-h-0 flex-col items-center gap-5 rounded-[24px] border border-border bg-card px-6 py-8 animate-in fade-in duration-300" style={place(PROFILE_SPAN)}>
-      <div className="pastel flex aspect-square w-3/4 shrink-0 items-center justify-center rounded-full text-5xl font-semibold tracking-tight" style={{ ["--tint" as string]: tint(AVATAR_TINT) }} aria-hidden>
-        {initials}
+    <>
+      <div className="flex min-h-0 flex-col items-center gap-5 rounded-[24px] border border-border bg-card px-6 py-8 animate-in fade-in duration-300" style={place(PROFILE_SPAN)}>
+        <div className="pastel flex aspect-square w-3/4 shrink-0 items-center justify-center rounded-full text-5xl font-semibold tracking-tight" style={{ ["--tint" as string]: tint(AVATAR_TINT) }} aria-hidden>
+          {initials}
+        </div>
+        <div className="flex w-full flex-col gap-2">
+          <EditableField target={ACCOUNT_EDIT_NAME} value={name} primary enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} />
+          <EditableField target={ACCOUNT_EDIT_EMAIL} value={email} enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} />
+        </div>
+        <Badge variant="secondary" className="px-3 py-1 text-[13px] font-medium">Free plan</Badge>
+        <ChatFocusable target={ACCOUNT_LOG_OUT} enabled={enabled} flashKey={lastFlash[ACCOUNT_LOG_OUT.id]} radius="rounded-2xl" className="mt-auto w-full" onActivate={onActivate}>
+          <Button variant="outline" className="h-11 w-full gap-2 rounded-2xl text-[15px] font-normal">
+            <LogOut className="size-4.5" /> Log out
+          </Button>
+        </ChatFocusable>
       </div>
-      <div className="flex w-full flex-col gap-2">
-        <EditableField target={ACCOUNT_EDIT_NAME} value={name} primary enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} />
-        <EditableField target={ACCOUNT_EDIT_EMAIL} value={email} enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} />
-      </div>
-      <Badge variant="secondary" className="px-3 py-1 text-[13px] font-medium">Free plan</Badge>
-      <ChatFocusable target={ACCOUNT_LOG_OUT} enabled={enabled} flashKey={lastFlash[ACCOUNT_LOG_OUT.id]} radius="rounded-2xl" className="mt-auto w-full" onActivate={onActivate}>
-        <Button variant="outline" className="h-11 w-full gap-2 rounded-2xl text-[15px] font-normal">
-          <LogOut className="size-4.5" /> Log out
-        </Button>
-      </ChatFocusable>
-    </div>
+      <IsntSettingsPanel enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} style={place(SETTINGS_SPAN)} />
+    </>
   );
 }
 
