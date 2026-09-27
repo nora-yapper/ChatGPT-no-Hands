@@ -1,6 +1,6 @@
 "use client";
 
-import { FlaskConical, MessageSquare, Moon, PanelLeft, Sun } from "lucide-react";
+import { FlaskConical, MessageSquare, Moon, PanelLeft, Sun, WifiOff } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
 import type { FocusTarget } from "@/types/interaction";
@@ -25,6 +25,7 @@ const INTERFACES: Array<{ id: InterfaceId; label: string; href: string; icon: Re
 const SB_CLOSE: FocusTarget = { id: "sb-close", kind: "button", label: "Close sidebar", action: "SB_CLOSE" };
 const SB_OPEN: FocusTarget = { id: "sb-open", kind: "button", label: "Open sidebar", action: "SB_OPEN" };
 const SB_THEME: FocusTarget = { id: "sb-theme", kind: "button", label: "Toggle light / dark mode", action: "SB_THEME" };
+const SB_OFFLINE: FocusTarget = { id: "sb-offline", kind: "button", label: "Toggle Offline mode", action: "SB_OFFLINE" };
 /** the current interface's entry starts a new chat there (as the old sidebar did); the others navigate */
 const interfaceTarget = (i: (typeof INTERFACES)[number], current: InterfaceId): FocusTarget =>
   i.id === current
@@ -34,6 +35,7 @@ const interfaceTarget = (i: (typeof INTERFACES)[number], current: InterfaceId): 
 export interface SidebarHandlers {
   setSidebarOpen: (open: boolean) => void;
   toggleTheme: () => void;
+  toggleOffline: () => void;
   navigate: (href: string) => void;
   newChat: () => void;
 }
@@ -44,6 +46,7 @@ export function sidebarAction(action: string, target: FocusTarget | null, h: Sid
     case "SB_CLOSE": h.setSidebarOpen(false); return true;
     case "SB_OPEN": h.setSidebarOpen(true); return true;
     case "SB_THEME": h.toggleTheme(); return true;
+    case "SB_OFFLINE": h.toggleOffline(); return true;
     case "SB_GO": h.navigate(target?.payload?.href as string); return true;
     case "SB_NEW_CHAT": h.newChat(); return true;
     default: return false;
@@ -101,6 +104,28 @@ export function SidebarThemeToggle({ theme, ...p }: Common & { theme: "light" | 
     <ChatFocusable target={SB_THEME} enabled={p.enabled} flashKey={p.lastFlash[SB_THEME.id]} radius="rounded-xl" className="mt-2" onActivate={p.onActivate}>
       <button type="button" className="flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm hover:bg-accent">
         {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />} {theme === "dark" ? "Light mode" : "Dark mode"}
+      </button>
+    </ChatFocusable>
+  );
+}
+
+/**
+ * Offline mode: while on, nothing is sent to Claude (local suggestions, no replies). A switch-style tile above
+ * the theme toggle; the line under it says whether Claude is reachable at all (no API key → always local).
+ */
+export function SidebarOfflineToggle({ offline, claudeReady, ...p }: Common & { offline: boolean; claudeReady: boolean | null }) {
+  const status = offline ? "Only local suggestions" : claudeReady === false ? "No API key — local suggestions" : "Using Claude";
+  return (
+    <ChatFocusable target={SB_OFFLINE} enabled={p.enabled} flashKey={p.lastFlash[SB_OFFLINE.id]} radius="rounded-xl" className="mt-2" onActivate={p.onActivate}>
+      <button type="button" role="switch" aria-checked={offline} className="flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm hover:bg-accent">
+        <WifiOff className="size-5 shrink-0" />
+        <span className="flex min-w-0 flex-1 flex-col leading-tight">
+          <span>Offline mode</span>
+          <span className="truncate text-[11px] text-muted-foreground">{status}</span>
+        </span>
+        <span aria-hidden className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200", offline ? "bg-foreground" : "bg-muted-foreground/30")}>
+          <span className={cn("absolute top-0.5 size-4 rounded-full bg-background shadow-sm transition-transform duration-200", offline ? "translate-x-[18px]" : "translate-x-0.5")} />
+        </span>
       </button>
     </ChatFocusable>
   );

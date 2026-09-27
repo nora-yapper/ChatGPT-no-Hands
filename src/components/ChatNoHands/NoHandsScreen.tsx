@@ -61,6 +61,32 @@ export interface NoHandsScreenProps {
 const place = (s: Span, extra?: React.CSSProperties): React.CSSProperties => ({ gridColumn: s.col, gridRow: s.row, ...extra });
 const CELL = "h-full w-full whitespace-normal rounded-2xl text-[17px] font-normal leading-snug";
 
+/**
+ * A starter word at 20px, unless its field is too narrow for it: then only that word shrinks, just enough to fit
+ * (measured, and re-measured when the field resizes), so long starters like "Summarize" never clip on small
+ * screens while short ones stay big.
+ */
+function FitWord({ text, max = 20 }: { text: string; max?: number }) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const fit = () => {
+      el.style.fontSize = `${max}px`;
+      const cs = getComputedStyle(box);
+      const room = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const need = el.scrollWidth;
+      if (need > room && room > 0) el.style.fontSize = `${Math.floor((max * room) / need * 10) / 10}px`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [text, max]);
+  return <span ref={ref} className="whitespace-nowrap" style={{ fontSize: max }}>{text}</span>;
+}
+
 /* ───────────── pick transition ─────────────
  * The compass centre only ever shows the *latest* pick — not the whole growing prompt, which is already
  * visible in the prompt bar below. So there's nothing to append into and nothing to keep stable: a ghost of
@@ -230,7 +256,7 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
               style={place(BASE_PLACEMENT.starter(i), { ["--tint" as string]: tintColor, ["--fill" as string]: fillTint(i) })}
               onActivate={(target) => handlePick(target, tintColor, "starter", false)}
             >
-              <Button variant="ghost" className={cn(CELL, "text-xl hover:bg-transparent")}>{w}</Button>
+              <Button variant="ghost" className={cn(CELL, "px-1.5 hover:bg-transparent")}><FitWord text={w} /></Button>
             </ChatFocusable>
           );
         });
@@ -398,15 +424,18 @@ function FlightGhost({ flight, toRect, flying }: { flight: Flight; toRect: DOMRe
   );
 }
 
-function SlotCell({ slot, span, tintIndex, predictions, loading, enabled, lastFlash, onActivate, revealed }: { slot: Slot; span: Span; tintIndex: number; revealed: boolean } & NoHandsScreenProps) {
+function SlotCell({ slot, span, tintIndex, predictions, enabled, lastFlash, onActivate, revealed }: { slot: Slot; span: Span; tintIndex: number; revealed: boolean } & NoHandsScreenProps) {
   const text = slotText(slot, predictions);
   const isPhrase = (PHRASE_SLOTS as readonly string[]).includes(slot);
   const tintValue = tint(tintIndex);
   const tintVar = { ["--tint" as string]: tintValue, ["--fill" as string]: fillTint(tintIndex) };
-  // When predictions arrive *after* the reveal already played (on the loading placeholder), the real field
-  // replaces the placeholder as a fresh element — hold it hidden for two frames so it fades in too, instead
-  // of popping in at full opacity. (State adjusted during render, like `prevPrompt` above.)
-  const ready = !loading && !!text;
+  // Two separate animations: the coloured FIELD (fade + colour bloom, staggered clockwise) plays once per pick
+  // on one persistent element, whether or not its prediction has arrived; the WORD / PHRASE inside fades in on
+  // its own when it's ready. So predictions landing mid-reveal (or after it) never restart the field's animation.
+  // each field is ready as soon as its own word / phrase has streamed in, not when the whole set has
+  const ready = !!text;
+  // a freshly arrived prediction mounts hidden and fades in two frames later (state adjusted during render,
+  // like `prevPrompt` above)
   const [prevReady, setPrevReady] = useState(ready);
   const [entering, setEntering] = useState(false);
   if (ready !== prevReady) {
@@ -419,28 +448,41 @@ function SlotCell({ slot, span, tintIndex, predictions, loading, enabled, lastFl
     const outer = requestAnimationFrame(() => { inner = requestAnimationFrame(() => setEntering(false)); });
     return () => { cancelAnimationFrame(outer); cancelAnimationFrame(inner); };
   }, [entering]);
-  const shown = revealed && !entering;
   // the tint itself blooms in alongside the opacity fade: starts blended almost entirely into the page
   // background (so it works in both themes) and eases up to full colour, rather than just fading in flat
   const bloomValue = `color-mix(in oklch, ${tintValue}, var(--background) 85%)`;
-  const delay = shown ? CLOCKWISE.indexOf(slot) * REVEAL_STAGGER_MS : 0; // stagger the fade-in only, never the hide
-  const revealStyle: React.CSSProperties = {
-    opacity: shown ? 1 : 0,
-    backgroundColor: shown ? tintValue : bloomValue,
+  const delay = revealed ? CLOCKWISE.indexOf(slot) * REVEAL_STAGGER_MS : 0; // stagger the fade-in only, never the hide
+  const fieldStyle: React.CSSProperties = {
+    opacity: revealed ? 1 : 0,
+    backgroundColor: revealed ? tintValue : bloomValue,
     transition: `opacity ${REVEAL_FADE_MS}ms ${EASE} ${delay}ms, background-color ${REVEAL_FADE_MS}ms ${EASE} ${delay}ms`,
   };
-  if (!ready) {
-    return <div className="pastel h-full w-full animate-pulse rounded-2xl opacity-60" style={place(span, { ...tintVar, ...revealStyle })} aria-hidden />;
-  }
-  const t = slotTarget(slot, text);
-  // `enabled` itself stays stable across the reveal (ChatFocusable renders a different element tree when it
-  // toggles, which would defeat the transition below); `pointer-events-none` keeps it inert while invisible
+  const textShown = ready && !entering;
+  const t = text ? slotTarget(slot, text) : null;
   return (
-    <ChatFocusable key={slot} target={t} enabled={enabled} flashKey={lastFlash[t.id]} radius="rounded-2xl" onActivate={onActivate} className={cn("pastel", !shown && "pointer-events-none")} style={place(span, { ...tintVar, ...revealStyle })}>
-      <Button variant="ghost" className={cn(CELL, "px-4 hover:bg-transparent", isPhrase ? "text-[17px]" : "text-xl")}>
-        {text}
-      </Button>
-    </ChatFocusable>
+    <div className={cn("pastel relative rounded-2xl", !(revealed && textShown) && "pointer-events-none")} style={place(span, { ...tintVar, ...fieldStyle })}>
+      {ready && t ? (
+        // `enabled` itself stays stable across the reveal (ChatFocusable renders a different element tree when
+        // it toggles, which would defeat the transition); `pointer-events-none` above keeps it inert while hidden
+        <ChatFocusable
+          key={slot}
+          target={t}
+          enabled={enabled}
+          flashKey={lastFlash[t.id]}
+          radius="rounded-2xl"
+          onActivate={onActivate}
+          className="h-full w-full"
+          style={{ opacity: textShown ? 1 : 0, transition: `opacity ${REVEAL_FADE_MS}ms ${EASE}` }}
+        >
+          <Button variant="ghost" className={cn(CELL, "px-4 hover:bg-transparent", isPhrase ? "text-[17px]" : "text-xl")}>
+            {text}
+          </Button>
+        </ChatFocusable>
+      ) : (
+        // waiting for the prediction: a soft shimmer inside the field — the field itself stays put
+        <div className="absolute inset-0 animate-pulse rounded-2xl bg-background/35" aria-hidden />
+      )}
+    </div>
   );
 }
 

@@ -8,7 +8,9 @@ import { PHRASES_PER_SET, WORDS_PER_SET } from "@/chat/predictionRules";
  * Credentials come from the environment (ANTHROPIC_API_KEY or an `ant auth login` profile); without them
  * the routes fall back to local behaviour so the interaction prototype still works offline.
  */
-export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5";
+export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+/** predictions run after every pick while the user waits, so they use a faster model than replies */
+export const PREDICT_MODEL = process.env.ANTHROPIC_PREDICT_MODEL ?? "claude-sonnet-5";
 
 export function hasCredentials(): boolean {
   return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_PROFILE);
@@ -16,7 +18,9 @@ export function hasCredentials(): boolean {
 
 let client: Anthropic | null = null;
 function getClient() {
-  return (client ??= new Anthropic());
+  // a key that isn't scoped to a workspace must name one on every request
+  const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
+  return (client ??= new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {}));
 }
 
 const CandidateSchema = z.object({
@@ -32,6 +36,8 @@ The user is constructing a prompt by selecting suggested words and phrases. Give
 1. SINGLE-WORD CONTINUATIONS ("words"): exactly one word each; a natural grammatical continuation; highly relevant to the entire prompt; useful as the immediate next word. No punctuation, no filler, no repeats.
 2. PHRASE CONTINUATIONS ("phrases"): 3–5 words each; a natural grammatical continuation; relevant to the entire prompt; each should meaningfully advance or refine the user's intention; the set must be semantically diverse — different subjects, purposes or constraints, never four variations of one idea. No trailing punctuation.
 
+While the prompt is still short (a starter or a few words), favour useful task framings. Where they fit grammatically, draw on the common prompt-writing verbs — explain, summarize, compare, contrast, define, describe, outline, analyze, review, identify, show how, illustrate, clarify, elaborate (e.g. "Help" → "me outline an essay", "Can" → "you summarize this text", "Explain" → "step by step how"). Use them as options among others, not in every slot.
+
 Consider the complete meaning (instruction, output type, audience, context). Once the prompt already reads as a complete request, shift phrases toward refinement (style, scope, tone, format, constraints) instead of forcing it longer.
 
 Do not rewrite the existing prompt. Do not repeat substantial parts of it. Do not include explanations. Return structured JSON only.`;
@@ -43,13 +49,47 @@ Do not rewrite the existing prompt. Do not repeat substantial parts of it. Do no
 export async function generateCandidates(prompt: string, simple = false): Promise<Candidates> {
   const want = simple ? `Return exactly ${WORDS_PER_SET} words and exactly ${PHRASES_PER_SET} phrases.` : `Return ${WORDS_PER_SET * 2} words and ${PHRASES_PER_SET * 2} phrases so the interface can pick the most diverse ${WORDS_PER_SET} + ${PHRASES_PER_SET}.`;
   const response = await getClient().messages.parse({
-    model: MODEL,
+    model: PREDICT_MODEL,
     max_tokens: simple ? 512 : 1024,
     system: `${PREDICT_SYSTEM}\n\n${want}`,
     output_config: { effort: "low", format: zodOutputFormat(CandidateSchema) },
     messages: [{ role: "user", content: `COMPLETE CURRENT PROMPT:\n"""${prompt}"""` }],
   });
   return response.parsed_output ?? { words: [], phrases: [] };
+}
+
+const PREDICT_STREAM_FORMAT = `Output format: one candidate per line, nothing else — no JSON, no numbering, no commentary.
+A single word: W: <word>
+A phrase: P: <phrase>
+Alternate phrases and words (P, W, P, W, …), best first, so the most useful of each kind come early.`;
+
+/**
+ * The same request as `generateCandidates`, streamed: yields each complete candidate line as the model writes
+ * it, so the interface can show every word / phrase the moment it exists instead of waiting for all of them.
+ */
+export async function* streamCandidateLines(prompt: string, signal?: AbortSignal): AsyncGenerator<string> {
+  const system = PREDICT_SYSTEM.replace("Return structured JSON only.", "").trim();
+  const stream = getClient().messages.stream(
+    {
+      model: PREDICT_MODEL,
+      max_tokens: 1024,
+      system: `${system}\n\nReturn ${WORDS_PER_SET * 2} words and ${PHRASES_PER_SET * 2} phrases so the interface can pick the most diverse ${WORDS_PER_SET} + ${PHRASES_PER_SET}.\n\n${PREDICT_STREAM_FORMAT}`,
+      output_config: { effort: "low" },
+      messages: [{ role: "user", content: `COMPLETE CURRENT PROMPT:\n"""${prompt}"""` }],
+    },
+    { signal },
+  );
+  let buffer = "";
+  for await (const event of stream) {
+    if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
+    buffer += event.delta.text;
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      yield buffer.slice(0, nl);
+      buffer = buffer.slice(nl + 1);
+    }
+  }
+  if (buffer.trim()) yield buffer;
 }
 
 export interface ChatTurn {

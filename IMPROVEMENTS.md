@@ -503,3 +503,92 @@ Implemented as planned. The Input Lab's settings and panel are unchanged (no dif
 - **Checked:** a screenshot of the menu; the table still fits; the console is clean. Tests pass.
 
 **Follow-up (intro text):** About controls' intro now says what the table shows: "What each Movement setting adjusts behind the scenes: the tracking values it controls, how they change together, its default, and the safe range it stays within." The table still fits (488 of 586 px at 1440×900), and the console is clean.
+
+## 17. [x] New Chat starters: swap the two weakest for common prompt verbs
+
+> Based on the UMN CCAPS list of common prompt terms: keep 10 starters, replace `Could` → `Summarize` and `Give` → `Compare`.
+
+**Done.**
+- **Starters** (`STARTERS` in `predictionRules.ts`): What, How, Why, Can, **Summarize**, Help, Create, Write, Explain, **Compare**. They take the old words' slots, so the layout and colours are unchanged. The README lists the new words and cites the source under "Research & open source".
+- **Fit on small screens:** "Summarize" was wider than its field below ~1300 px, and "Explain" had already been clipping at 1024. Starters now render through `FitWord`, which measures the text against its field (re-measured on resize) and shrinks only a word that doesn't fit. Short words stay at 20px. At 1024×700, What is 20px, Explain 17.7px, Compare 13.7px and Summarize 11.2px; at 1440 all are 20px.
+- **Checked:** screenshots at 1440 in both themes and at 1024; the Summarize and Compare picks work; Back works; the console is clean.
+
+## 18. [x] Predictions: use the other common prompt verbs one step later
+
+> Bring the remaining good-fit terms (Outline, Define, Describe, Analyze, Review, Identify, Show how, Illustrate, Clarify, Contrast) into the model's prediction guidance and the offline fallbacks.
+
+**Done.**
+- **Model** (`PREDICT_SYSTEM` in `server/llm.ts`): while the prompt is still short, the model is asked to favour task framings built on the common prompt verbs (explain, summarize, compare, contrast, define, describe, outline, analyze, review, identify, show how, illustrate, clarify, elaborate), with three examples. They are options among others, not in every slot.
+- **Offline fallbacks** (`FALLBACK`):
+  - Summarize and Compare/Contrast have their own sets ("the key points of", "the pros and cons", …); before, they fell through to the generic "and / with a minimal style".
+  - One shared set covers Describe/Define/Outline/Analyze/Review/Identify/Clarify/Illustrate, and Elaborate has its own ("on the last point", …).
+  - Can and Help now offer "you summarize this text", "you outline a plan", "me outline an essay" and "me review my draft".
+  - Explain opens with "step by step how".
+- **Test:** every starter and each of those verbs gets its own offline set that survives validation as a full 4 + 4. 93 tests pass; lint and tsc are clean.
+
+## 19. [x] Real AI predictions with Claude
+
+> Implement actual AI predictions, with Claude only (the PREDICT4ALL idea is dropped). Offline suggestions stay as the fallback.
+
+**Done (code), waiting for an API key to try it live.**
+- **Already built:** the Claude path existed: `/api/predict` sends the whole prompt, and the model returns 8 + 8 candidates that are validated down to 4 + 4. It falls back from the full request to one retry, then a simpler request, then the local rules. It never ran because there was no key.
+- **Models:**
+  - Predictions now use **`claude-sonnet-5`**. They run after every pick while the user waits, so speed matters more than depth.
+  - Replies use **`claude-sonnet-5`** too (changed from Opus 5.5 on request).
+  - Both can be changed (`ANTHROPIC_PREDICT_MODEL` / `ANTHROPIC_MODEL`).
+- **Setup:** `.env.example` explains it: copy it to `.env.local`, add the key, and restart `npm run dev`.
+- **Status:** `/api/status` tells the UI whether the server has a key. Without one, the header badge reads "No API key — offline suggestions".
+- **PREDICT4ALL dropped:** the source copy in the scratchpad is deleted. Its Java install had failed (it needed an admin password), so nothing was left on the system; nothing was ever added to the repo.
+
+## 20. [x] Offline mode switch in the sidebar
+
+> An Offline mode in the sidebar: while on, nothing is sent to Claude; predictions come from the local rules.
+
+**Done.**
+- **Switch:** "Offline mode" sits above the theme toggle. It's a 48px, head-selectable tile (`sb-offline`, action `SB_OFFLINE`) with a switch (`role="switch"`). The line under it reads "Using Claude", "No API key — local suggestions" or "Only local suggestions". The setting is remembered per browser (`isnt-offline-mode`).
+- **While on:**
+  - Predictions are computed in the browser from the local rules (`offlinePredictions`), with source `offline`.
+  - Replies are a notice telling you to turn Offline mode off.
+  - No request leaves the page.
+  - The header shows an "Offline mode" badge.
+- **Caching:** Claude and offline results are cached separately, so switching modes re-predicts the current prompt.
+- **Checked in the browser:**
+  - With no key, the badge reads "No API key — offline suggestions".
+  - With the switch on: the badge reads "Offline mode", picking and sending made **zero** `/api/*` requests, and the reply is the notice.
+  - The switch stays on after a reload. The console is clean; tsc and lint are clean.
+
+## 21. [x] Compass: field animation separate from the word / phrase animation
+
+> The animation starts before the words and phrases are generated, and restarts once they arrive. Separate the coloured fields' animation from the text's, so there's no glitch.
+
+**Done.**
+- **Cause:** while a prediction was loading, each field was a placeholder element. When the prediction arrived, it was replaced by a new element that hid and replayed the fade and colour bloom.
+- **Fix:** each compass field (`SlotCell`) is now one persistent coloured element. It plays the fade plus colour bloom (staggered clockwise) once per pick, whether or not the prediction has arrived.
+  - The word or phrase lives inside it and fades in on its own when it's ready.
+  - While waiting, a soft shimmer shows inside the field.
+  - The field ignores the pointer until its text is visible.
+- **Checked:** predictions were delayed by 1.2 s in the browser, on a starter pick and a compass pick. The field reached full opacity at about 0.9 s and stayed there; the text faded from 0 to 1 only after the prediction landed. There's no replay, and the field element is the same throughout. Screenshot in dark mode; tsc and lint are clean; 93 tests pass.
+
+## 22. [x] Show predictions as they are generated
+
+> The text animation waits for all words and phrases. Animate each one in as it's generated.
+
+**Done.**
+- **Server** (`/api/predict`):
+  - It now streams. Claude writes one candidate per line (`W: …` / `P: …`, alternating, best first) via `streamCandidateLines` in `server/llm.ts`.
+  - Each complete line is parsed (`parseCandidateLine`) and put through the same validation, de-duplication and diversity rules. Those rules are now incremental (`PredictionSelector`), and `selectPredictions` uses the same code.
+  - Each accepted item is sent at once as an NDJSON event, then `done`.
+  - Anything still missing gets one plain retry, then the local rules. Something already shown is never withdrawn.
+  - A cancelled request (a new pick or Back) stops writing.
+- **Client:**
+  - `fetchPredictions` reads the stream and reports each item.
+  - ChatNoHands keeps the partial set and marks it done at the end. An interrupted stream's half set is removed, so coming back re-predicts it cleanly.
+  - If the stream fails midway, what's on screen stays and the local rules fill the rest.
+- **Fields:** each field is "ready" when its own text exists, and it fades in on its own; issue 21's field animation is untouched.
+- **Pacing:** Claude writes in bursts (5 lines within a few ms), so items are released at most one per 80 ms, in the order written. A lone item isn't delayed.
+- **Checked (real Claude, Sonnet 5):**
+  - "Explain": the first field at 1.7 s, then one every ~85 ms until 2.3 s.
+  - After a compass pick: 1.8–2.6 s.
+  - The field opacity never dips after the reveal.
+  - A pick mid-stream followed by Back refills all 8.
+  - Screenshot mid-stream. 95 tests pass (new: line parsing; incremental selection matches the whole-set selection). tsc and lint are clean; the console is clean.

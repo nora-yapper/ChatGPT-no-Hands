@@ -13,8 +13,11 @@ export function newMessage(role: ChatRole, content: string): ChatMessage {
   return { id: `m${++counter}-${Date.now()}`, role, content, at: performance.now() };
 }
 
-/** Sends the conversation to the server-side model route and returns the reply text. */
-export async function askAssistant(history: ChatMessage[]): Promise<string> {
+export const OFFLINE_REPLY = "Offline mode is on, so this message wasn't sent to Claude. Turn off Offline mode in the sidebar to get an answer.";
+
+/** Sends the conversation to the server-side model route and returns the reply text (nothing is sent in Offline mode). */
+export async function askAssistant(history: ChatMessage[], offline = false): Promise<string> {
+  if (offline) return OFFLINE_REPLY;
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },

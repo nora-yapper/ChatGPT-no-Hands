@@ -22,7 +22,7 @@ the tab strip in the header:
 - **ChatGPT No Hands** (`/chat`): a hands-free chat GUI that explores using ChatGPT without typing or voice. The user
   builds a prompt spatially — **choose → predict → choose** — with the existing Grid Glide head interaction:
 
-  1. *Starters.* Ten high-utility first words (What, How, Why, Can, Could, Help, Create, Write, Explain, Give) in a
+  1. *Starters.* Ten high-utility first words (What, How, Why, Can, Summarize, Help, Create, Write, Explain, Compare — question words plus task verbs from common prompt-writing terms, see Research & open source) in a
      4 / 3 / 3 grid of large fields. No keyboard is shown.
   2. *Prediction compass.* After a pick the chosen text moves to the centre and 8 AI predictions appear around it in a
      fixed spatial grammar: **4 phrases (3–5 words) on the cardinal fields ↑ → ↓ ←** and **4 single words on the
@@ -50,12 +50,18 @@ the tab strip in the header:
      afterwards; a chat started from within a project is filed there on that first send). Data lives in a small
      localStorage store (`src/components/ChatNoHands/recents/`) seeded with sample chats.
 
-  Every prediction request sends the **entire prompt so far** to `/api/predict`, which asks the model for a larger
-  candidate pool and then validates, de-duplicates and picks 4 + 4 for relevance, grammaticality and semantic
-  diversity (`src/chat/predictionRules.ts`, unit-tested). A failed or malformed model response is retried once,
-  then a simpler request is tried, then local fallback suggestions are used — the Keyboard is always available, so
+  Every prediction request sends the **entire prompt so far** to `/api/predict`, which **streams**: Claude writes one
+  candidate per line (`W: word` / `P: phrase`), and each line is validated, de-duplicated and checked for diversity the
+  moment it's complete (`PredictionSelector` in `src/chat/predictionRules.ts`, unit-tested) and sent on as NDJSON.
+  Each compass field fills in and fades in as soon as its own word or phrase exists (bursts are spaced ~80 ms apart);
+  the coloured fields themselves animate once per pick, independently. Whatever the stream doesn't fill is asked for
+  once more (plain request), then topped up from local fallback suggestions — the Keyboard is always available, so
   the user is never trapped. Replies come from `/api/chat`. Both routes share
-  `src/server/llm.ts` (Anthropic SDK, `claude-opus-5` by default). Without `ANTHROPIC_API_KEY` (see `.env.example`)
+  `src/server/llm.ts` (Anthropic SDK: predictions on `claude-sonnet-5` for speed, replies on `claude-sonnet-5` too; override
+  with `ANTHROPIC_PREDICT_MODEL` / `ANTHROPIC_MODEL`; a key that isn't scoped to a workspace also needs
+  `ANTHROPIC_WORKSPACE_ID`). An **Offline mode** switch in the sidebar (remembered per browser)
+  sends nothing to Claude: predictions come from the local rules in the browser and replies are a short notice; the line
+  under the switch says whether the server has a key (`/api/status`). Without `ANTHROPIC_API_KEY` (see `.env.example`)
   the app still works with local fallback suggestions and a placeholder reply, and the header shows
   “offline suggestions”. Mouse clicks on any field trigger the same action as a confirmed gesture, for testing.
 
@@ -171,3 +177,26 @@ needs to change.
 - Head range defaults (±20° yaw, ±15° pitch → full pointer travel) and the 1.4 pointer gain are starting points.
 - Screen-space gaze is unavailable. `eyeX/eyeY` from `eyeLook*` blendshapes can be blended into the pointer with the
   "Eye blend" slider, but it is experimental and noisy.
+
+## Research & open source
+
+Sources and tools this project builds on. Keep this list current when a new one is used.
+
+**Research / references**
+
+- University of Minnesota CCAPS, *Common Writing Prompt Terms* —
+  https://ccaps.umn.edu/esl-resources/students/writing/common-prompts — the common instruction verbs used in prompt
+  writing (Explain, Summarize, Compare, Define, Outline, …); reviewed for the New Chat starter words.
+
+**Open-source tools**
+
+- [MediaPipe Tasks Vision](https://github.com/google-ai-edge/mediapipe) — FaceLandmarker (landmarks, blendshapes,
+  head transformation matrix), run in the browser via wasm
+- [Next.js](https://nextjs.org), [React](https://react.dev), [TypeScript](https://www.typescriptlang.org)
+- [Tailwind CSS](https://tailwindcss.com), [tw-animate-css](https://github.com/Wombosvideo/tw-animate-css)
+- [shadcn/ui](https://ui.shadcn.com) on [Radix UI](https://www.radix-ui.com), with class-variance-authority, clsx and
+  tailwind-merge
+- [Lucide](https://lucide.dev) icons
+- [Zod](https://zod.dev) — validation of model responses
+- [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) — predictions and replies
+- [Vitest](https://vitest.dev), [ESLint](https://eslint.org) — tests and linting

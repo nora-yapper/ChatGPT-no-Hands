@@ -47,6 +47,18 @@ describe("prediction rules", () => {
     expect(appendToPrompt("Create a website ", "for my portfolio")).toBe("Create a website for my portfolio");
   });
 
+  it("gives every starter and common prompt verb its own full, valid offline 4 + 4", async () => {
+    const { STARTERS } = await import("@/chat/predictionRules");
+    const generic = fallbackPredictions("Something completely unrelated");
+    for (const p of [...STARTERS, "Outline", "Define", "Describe", "Analyze", "Review", "Identify", "Clarify", "Contrast", "Elaborate"]) {
+      const f = fallbackPredictions(p);
+      expect(f, p).not.toBe(generic);
+      const out = selectPredictions({ words: [], phrases: [] }, p, f);
+      expect(out.words, p).toHaveLength(4);
+      expect(out.phrases, p).toHaveLength(4);
+    }
+  });
+
   it("always has an offline fallback of 4 + 4", () => {
     for (const p of ["What", "Create a website", "Explain how AI affects", "Something completely unrelated to the tables here at all"]) {
       const f = fallbackPredictions(p);
@@ -86,3 +98,29 @@ describe("compass colours", () => {
   });
 });
 
+
+describe("streamed prediction lines", () => {
+  it("parses W/P lines and tolerates list markers and quotes", async () => {
+    const { parseCandidateLine } = await import("@/chat/predictionRules");
+    expect(parseCandidateLine("W: essay")).toEqual({ kind: "word", text: "essay" });
+    expect(parseCandidateLine("- P: \"a cover letter\"")).toEqual({ kind: "phrase", text: "a cover letter" });
+    expect(parseCandidateLine("2. p | the pros and cons")).toEqual({ kind: "phrase", text: "the pros and cons" });
+    expect(parseCandidateLine("Here are some options:")).toBeNull();
+    expect(parseCandidateLine("W:   ")).toBeNull();
+  });
+
+  it("accepts candidates one at a time exactly like the whole-set selection", async () => {
+    const { PredictionSelector } = await import("@/chat/predictionRules");
+    const candidates = { words: ["website", "site", "Site", "for", "with", "that", "using"], phrases: ["website for my portfolio", "for my design portfolio", "with a dark palette", "that loads fast", "using plain HTML only", "for a bakery"] };
+    const sel = new PredictionSelector("Create a website");
+    const accepted: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const w = candidates.words[i] && sel.offerWord(candidates.words[i]);
+      const p = candidates.phrases[i] && sel.offerPhrase(candidates.phrases[i]);
+      if (w) accepted.push(w);
+      if (p) accepted.push(p);
+    }
+    expect(sel.result()).toEqual(selectPredictions(candidates, "Create a website"));
+    expect(accepted).toHaveLength(sel.words.length + sel.phrases.length); // nothing shown is ever withdrawn
+  });
+});

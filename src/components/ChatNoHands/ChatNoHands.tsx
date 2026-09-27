@@ -14,12 +14,12 @@ import { labStore, useLab } from "@/store/labStore";
 import { settingsStore, useSettings } from "@/store/settingsStore";
 import type { ActionEvent, FocusMode, FocusTarget } from "@/types/interaction";
 import { askAssistant, newMessage, type ChatMessage } from "@/chat/assistant";
-import { fetchPredictions } from "@/chat/predictions";
-import { fallbackPredictions, type Predictions } from "@/chat/predictionRules";
+import { fetchPredictions, type PredictionResult } from "@/chat/predictions";
+import { fallbackPredictions, selectPredictions, type Predictions } from "@/chat/predictionRules";
 import { buildPrompt, pushSegment, undoSegment, type Segment } from "@/chat/promptState";
 import { cn } from "@/lib/utils";
 import { NoHandsScreen } from "./NoHandsScreen";
-import { SidebarCloseButton, SidebarInterfaces, SidebarOpenButton, SidebarThemeToggle, sidebarAction } from "./SidebarControls";
+import { SidebarCloseButton, SidebarInterfaces, SidebarOfflineToggle, SidebarOpenButton, SidebarThemeToggle, sidebarAction } from "./SidebarControls";
 import { TransitIndicator } from "./TransitIndicator";
 import { KeyboardModal } from "./KeyboardModal";
 import { RenameKeyboardModal } from "./RenameKeyboardModal";
@@ -39,10 +39,21 @@ function readTheme(): Theme {
   }
 }
 
-/** a prediction result for one prompt */
+/** Offline mode (sidebar): nothing is sent to Claude — predictions come from the local rules, replies are a notice */
+const OFFLINE_KEY = "isnt-offline-mode";
+function readOffline(): boolean {
+  try {
+    return localStorage.getItem(OFFLINE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** a prediction result for one prompt — partial while it streams in */
 interface Fetched {
   p: Predictions;
-  source: "model" | "fallback";
+  source: PredictionResult["source"];
+  done: boolean;
 }
 
 /** everything the shared on-screen keyboard can be pre-loaded to edit */
@@ -76,6 +87,14 @@ export default function ChatNoHands() {
   const settings = useSettings();
   const isnt = settings.isnt;
   const [theme, setTheme] = useState<Theme>(readTheme);
+  const [offline, setOffline] = useState<boolean>(readOffline);
+  const offlineRef = useRef(offline);
+  useEffect(() => { offlineRef.current = offline; }, [offline]);
+  /** whether the server has Claude credentials (null until known) — shown under the Offline mode switch */
+  const [claudeReady, setClaudeReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch("/api/status").then((r) => r.json()).then((d: { claude?: boolean }) => setClaudeReady(!!d.claude)).catch(() => setClaudeReady(false));
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // conversation
@@ -90,7 +109,7 @@ export default function ChatNoHands() {
   // §22: the prompt is derived from the segments the user chose or typed; undo drops the last one.
   const [segments, setSegments] = useState<Segment[]>([]);
   const prompt = buildPrompt(segments);
-  /** prediction results by prompt (this session), so Back restores a previous compass instantly */
+  /** prediction results by prompt (this session, per mode — see `cacheKey`), so Back restores a previous compass instantly */
   const [results, setResults] = useState<Record<string, Fetched>>({});
 
   const [keyboardOpen, setKeyboardOpen] = useState(false);
@@ -140,6 +159,14 @@ export default function ChatNoHands() {
     });
   }, []);
 
+  const toggleOffline = useCallback(() => {
+    setOffline((current) => {
+      const next = !current;
+      try { localStorage.setItem(OFFLINE_KEY, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -147,25 +174,47 @@ export default function ChatNoHands() {
 
   // ── predictions: always from the COMPLETE prompt ────────────────────────────────────────
   const wantPredictions = !!prompt && screen === "new";
-  const current = wantPredictions ? results[prompt] : undefined;
+  // Offline and Claude results are cached apart, so switching mode re-predicts the current prompt
+  const cacheKey = `${offline ? "offline" : "ai"}:${prompt}`;
+  const current = wantPredictions ? results[cacheKey] : undefined;
   const predictions: Predictions | null = current?.p ?? null;
   const predictionSource = current?.source ?? null;
-  const predicting = wantPredictions && !current;
+  /** still generating: some (or all) of the 4 + 4 haven't arrived yet — each field fills in as its own does */
+  const predicting = wantPredictions && !current?.done;
+  const currentDone = !!current?.done;
   useEffect(() => {
-    if (!wantPredictions || current) return;
+    if (!wantPredictions || currentDone) return;
     const ctrl = new AbortController();
-    fetchPredictions(prompt, ctrl.signal)
+    let shown: Predictions = { words: [], phrases: [] };
+    let finished = false;
+    fetchPredictions(prompt, ctrl.signal, offline, (partial) => {
+      if (ctrl.signal.aborted) return;
+      shown = partial;
+      setResults((m) => ({ ...m, [cacheKey]: { p: partial, source: "model", done: false } }));
+    })
       .then((r) => {
         if (ctrl.signal.aborted) return;
-        setResults((m) => ({ ...m, [prompt]: { p: { words: r.words, phrases: r.phrases }, source: r.source } }));
+        finished = true;
+        setResults((m) => ({ ...m, [cacheKey]: { p: { words: r.words, phrases: r.phrases }, source: r.source, done: true } }));
       })
       .catch((err) => {
         if (ctrl.signal.aborted) return;
         console.warn("[predict]", err);
-        setResults((m) => ({ ...m, [prompt]: { p: fallbackPredictions(prompt), source: "fallback" } }));
+        finished = true;
+        // keep whatever is already on screen; the local rules fill the rest
+        setResults((m) => ({ ...m, [cacheKey]: { p: selectPredictions(shown, prompt, fallbackPredictions(prompt)), source: "fallback", done: true } }));
       });
-    return () => ctrl.abort();
-  }, [prompt, wantPredictions, current]);
+    return () => {
+      ctrl.abort();
+      // an interrupted stream leaves no half set behind: coming back to this prompt starts it afresh
+      if (!finished) setResults((m) => {
+        if (m[cacheKey]?.done !== false) return m;
+        const rest = { ...m };
+        delete rest[cacheKey];
+        return rest;
+      });
+    };
+  }, [prompt, wantPredictions, currentDone, offline, cacheKey]);
 
   const promptRef = useRef(prompt);
   const chatIdRef = useRef(chatId);
@@ -216,7 +265,7 @@ export default function ChatNoHands() {
     }
     setPendingProjectId(null);
     try {
-      const reply = await askAssistant(history);
+      const reply = await askAssistant(history, offlineRef.current);
       const full = [...history, newMessage("assistant", reply)];
       setMessages(full);
       if (id) recents.saveConversation(id, stored(full));
@@ -362,11 +411,11 @@ export default function ChatNoHands() {
         case "ACCOUNT_EDIT_EMAIL": setRenameTarget({ kind: "account-email", id: "", value: accountEmail }); break;
         case "LOG_OUT": break; // not part of this prototype
         default:
-          sidebarAction(action, target, { setSidebarOpen, toggleTheme, navigate: (href) => router.push(href), newChat });
+          sidebarAction(action, target, { setSidebarOpen, toggleTheme, toggleOffline, navigate: (href) => router.push(href), newChat });
       }
       if (target) setLastFlash((f) => ({ ...f, [target.id]: timestamp }));
     },
-    [pick, undo, send, closeKeyboard, closeRename, newChat, accountName, accountEmail, toggleTheme, router],
+    [pick, undo, send, closeKeyboard, closeRename, newChat, accountName, accountEmail, toggleTheme, toggleOffline, router],
   );
 
   const handleAction = useCallback(
@@ -505,6 +554,7 @@ export default function ChatNoHands() {
               </div>
               {cameraProblem && <div className="mt-2 px-1 text-[11px] leading-snug text-destructive">{lab.camera.message}</div>}
             </div>
+            <SidebarOfflineToggle offline={offline} claudeReady={claudeReady} enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
             <SidebarThemeToggle theme={theme} enabled={headEnabled && sidebarOpen} lastFlash={lastFlash} onActivate={onActivate} />
           </div>
         </aside>
@@ -518,8 +568,12 @@ export default function ChatNoHands() {
               <div className="px-2.5 text-[18px] font-medium text-foreground">ISNT</div>
             </div>
             <div className="flex items-center gap-2">
-              {predictionSource === "fallback" && prompt && (
-                <Badge variant="outline" className="h-7 rounded-full border-border px-2.5 text-xs font-normal text-muted-foreground">offline suggestions</Badge>
+              {offline ? (
+                <Badge variant="outline" className="h-7 rounded-full border-border px-2.5 text-xs font-normal text-muted-foreground">Offline mode</Badge>
+              ) : (
+                predictionSource === "fallback" && prompt && (
+                  <Badge variant="outline" className="h-7 rounded-full border-border px-2.5 text-xs font-normal text-muted-foreground">{claudeReady === false ? "No API key — offline suggestions" : "offline suggestions"}</Badge>
+                )
               )}
               {incognito && (
                 <Badge variant="outline" className="h-7 rounded-full border-border px-2.5 text-xs font-normal text-muted-foreground">Temporary chat — not saved</Badge>

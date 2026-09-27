@@ -1,47 +1,75 @@
-import { NextResponse } from "next/server";
-import { PHRASES_PER_SET, WORDS_PER_SET, fallbackPredictions, selectPredictions, type Predictions } from "@/chat/predictionRules";
-import { generateCandidates, hasCredentials, type Candidates } from "@/server/llm";
+import { PredictionSelector, fallbackPredictions, parseCandidateLine } from "@/chat/predictionRules";
+import type { PredictEvent } from "@/chat/predictions";
+import { generateCandidates, hasCredentials, streamCandidateLines } from "@/server/llm";
 
 export const runtime = "nodejs";
 
-interface PredictResponse extends Predictions {
-  /** "model" when an LLM produced the candidates, "fallback" when local rules did */
-  source: "model" | "fallback";
-  error?: string;
-}
-
-/** POST { prompt } → { words[4], phrases[4], source }. Always receives the complete prompt built so far. */
+/**
+ * POST { prompt } → NDJSON stream of PredictEvents. Always receives the complete prompt built so far.
+ * §28/§35: streamed request → one plain (non-streamed) retry for whatever is still missing → local rules.
+ * Every candidate is validated / de-duplicated as it arrives (PredictionSelector), so what's shown never changes.
+ */
 export async function POST(req: Request) {
   let prompt = "";
   try {
     const body = (await req.json()) as { prompt?: unknown };
     prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   } catch {
-    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+    return Response.json({ error: "invalid body" }, { status: 400 });
   }
-  if (!prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
+  if (!prompt) return Response.json({ error: "prompt required" }, { status: 400 });
 
-  const fallback = fallbackPredictions(prompt);
-  if (!hasCredentials()) {
-    const res: PredictResponse = { ...selectPredictions({ words: [], phrases: [] }, prompt, fallback), source: "fallback" };
-    return NextResponse.json(res);
-  }
-  // §28/§35: full request → one retry → simpler request → local fallback. Malformed or thin results count as failures.
-  const attempts: Array<() => Promise<Candidates>> = [() => generateCandidates(prompt), () => generateCandidates(prompt), () => generateCandidates(prompt, true)];
-  let lastError: unknown = null;
-  for (const attempt of attempts) {
-    try {
-      const picked = selectPredictions(await attempt(), prompt);
-      if (picked.words.length === WORDS_PER_SET && picked.phrases.length === PHRASES_PER_SET) {
-        const res: PredictResponse = { ...picked, source: "model" };
-        return NextResponse.json(res);
+  const encoder = new TextEncoder();
+  let cancelled = false; // the page moved on (new pick / Back) and stopped reading
+  const body = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+    async start(controller) {
+      const send = (e: PredictEvent) => {
+        if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(e)}\n`));
+      };
+      const sel = new PredictionSelector(prompt);
+      const offer = (kind: "word" | "phrase", text: string) => {
+        const accepted = kind === "word" ? sel.offerWord(text) : sel.offerPhrase(text);
+        if (accepted) send({ type: kind, text: accepted });
+      };
+      let fromModel = 0;
+      let lastError: unknown = null;
+
+      if (hasCredentials()) {
+        try {
+          for await (const line of streamCandidateLines(prompt, req.signal)) {
+            const c = parseCandidateLine(line);
+            if (!c) continue;
+            const before = sel.words.length + sel.phrases.length;
+            offer(c.kind, c.text);
+            fromModel += sel.words.length + sel.phrases.length - before;
+            if (sel.full || cancelled) break;
+          }
+        } catch (err) {
+          lastError = err;
+        }
+        if (!sel.full && !req.signal.aborted && !cancelled) {
+          try {
+            const more = await generateCandidates(prompt, true);
+            const before = sel.words.length + sel.phrases.length;
+            for (const w of more.words) offer("word", w);
+            for (const p of more.phrases) offer("phrase", p);
+            fromModel += sel.words.length + sel.phrases.length - before;
+          } catch (err) {
+            lastError = err;
+          }
+        }
+        if (!sel.full) console.error("[predict] topping up from local rules:", lastError ?? "too few valid candidates");
       }
-      lastError = new Error("model returned too few valid candidates");
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  console.error("[predict] falling back after model failures:", lastError);
-  const res: PredictResponse = { ...selectPredictions({ words: [], phrases: [] }, prompt, fallback), source: "fallback", error: String(lastError) };
-  return NextResponse.json(res);
+
+      const added = sel.topUp(fallbackPredictions(prompt));
+      for (const w of added.words) send({ type: "word", text: w });
+      for (const p of added.phrases) send({ type: "phrase", text: p });
+      send({ type: "done", source: fromModel > 0 ? "model" : "fallback", ...(lastError ? { error: String(lastError) } : {}) });
+      if (!cancelled) controller.close();
+    },
+  });
+  return new Response(body, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
 }
