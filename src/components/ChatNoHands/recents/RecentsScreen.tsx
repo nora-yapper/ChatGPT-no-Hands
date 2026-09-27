@@ -7,6 +7,7 @@ import { pipeline } from "@/pipeline/Pipeline";
 import type { ActionEvent, FocusTarget } from "@/types/interaction";
 import { cn } from "@/lib/utils";
 import { ChatFocusable } from "../ChatFocusable";
+import { TilePanel, type TilePanelItem } from "../TilePanel";
 import { BASE_COLS, BASE_PLACEMENT, PHRASE_TINT, tint, type Span } from "../spatial";
 import { useHeadScrollTarget } from "../useHeadScroll";
 import { recents, relativeTime, sortChats, sortProjects, useRecents, type Project, type RecentChat } from "./recentsStore";
@@ -329,7 +330,7 @@ function MenuPanel({ menu, chats, projects, enabled, lastFlash, onActivate }: { 
   const title = chat?.title ?? project?.title ?? "";
   const id = menu.id;
 
-  let items: Array<{ target: FocusTarget; icon: React.ReactNode; label: string; danger?: boolean }> = [];
+  let items: TilePanelItem[] = [];
   if (menu.kind === "chat" && menu.mode === "menu") {
     items = [
       { target: t(`m-pin`, chat?.pinned ? "Unpin" : "Pin", "RC_PIN_CHAT", { id }), icon: chat?.pinned ? <PinOff className="size-5" /> : <Pin className="size-5" />, label: chat?.pinned ? "Unpin" : "Pin" },
@@ -349,23 +350,15 @@ function MenuPanel({ menu, chats, projects, enabled, lastFlash, onActivate }: { 
       { target: t(`m-delete`, "Delete", "RC_DELETE_PROJECT", { id }), icon: <Trash2 className="size-5" />, label: "Delete", danger: true },
     ];
   }
-  // a grid of squarer tiles: up to 3 per row, two rows; Close is always the last tile
-  const tiles = items.length + 1;
-  const cols = tiles <= 4 ? 2 : 3;
-  const rows = Math.ceil(tiles / cols);
   return (
-    <div className="z-[5] flex min-h-0 flex-col rounded-[24px] border border-border bg-card p-3 shadow-[0_8px_32px_rgba(0,0,0,0.16)] animate-in fade-in zoom-in-95 duration-200" style={place({ col: PROJECTS_COL, row: OVERVIEW_REGION.row })} role="menu" aria-label={`Menu: ${title}`}>
-      <div className="mb-2 truncate px-2 text-xs font-medium text-muted-foreground">{menu.mode === "move" ? `Move “${title}” to` : title}</div>
-      <div className="grid min-h-0 flex-1 gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
-        {items.map((it) => (
-          <ChatFocusable key={it.target.id} target={it.target} enabled={enabled} flashKey={lastFlash[it.target.id]} radius="rounded-2xl" onActivate={onActivate}>
-            <Button variant="secondary" role="menuitem" className={cn("h-full w-full flex-col gap-2 whitespace-normal rounded-2xl px-3 text-[15px] font-normal leading-snug [&_svg]:size-6", it.danger && "text-destructive")}>{it.icon} {it.label}</Button>
-          </ChatFocusable>
-        ))}
-        <ChatFocusable target={t("m-close", "Close menu", "RC_CLOSE")} enabled={enabled} flashKey={lastFlash["rc-m-close"]} radius="rounded-2xl" onActivate={onActivate}>
-          <Button variant="ghost" role="menuitem" className="h-full w-full flex-col gap-2 rounded-2xl px-3 text-[15px] font-normal text-muted-foreground [&_svg]:size-6"><X /> Close</Button>
-        </ChatFocusable>
-      </div>
-    </div>
+    <TilePanel
+      title={menu.mode === "move" ? `Move “${title}” to` : title}
+      items={items}
+      close={t("m-close", "Close menu", "RC_CLOSE")}
+      enabled={enabled}
+      lastFlash={lastFlash}
+      onActivate={onActivate}
+      style={place({ col: PROJECTS_COL, row: OVERVIEW_REGION.row })}
+    />
   );
 }

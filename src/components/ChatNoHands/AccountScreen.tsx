@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { LogOut, Pencil } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { Badge } from "@/components/shadcn/badge";
@@ -14,6 +15,8 @@ import { BASE_COLS, tint, type Span } from "./spatial";
  * own settings in the right two thirds. */
 const PROFILE_SPAN: Span = { col: "1 / 9", row: "1 / 15" };
 const SETTINGS_SPAN: Span = { col: `9 / ${BASE_COLS + 1}`, row: "1 / 15" };
+/** the whole screen block, tabs included: where More › About controls opens (its table needs the room) */
+const BLOCK_SPAN: Span = { col: `1 / ${BASE_COLS + 1}`, row: "1 / 18" };
 /** the avatar's pastel, fixed rather than derived from a prompt choice like the compass fields */
 const AVATAR_TINT = 6; // periwinkle
 
@@ -29,13 +32,21 @@ export interface AccountScreenProps {
   onActivate: (t: FocusTarget) => void;
   name: string;
   email: string;
+  /** More › About controls covers the whole screen block, tabs included, while open */
+  onCoverNav?: (covered: boolean) => void;
 }
 
 /**
  * Account: the left third is the profile section — a big pastel avatar, identity, plan, and Log out
  * anchored to the bottom of the card. The right two thirds are ISNT's settings (gestures and movement).
  */
-export function AccountScreen({ enabled, lastFlash, onActivate, name, email }: AccountScreenProps) {
+export function AccountScreen({ enabled, lastFlash, onActivate, name, email, onCoverNav }: AccountScreenProps) {
+  // More › About controls is portalled into a host over the whole block; while it's open the profile card is
+  // covered, so its controls stop being head targets too
+  const [advancedHost, setAdvancedHost] = useState<HTMLDivElement | null>(null);
+  const [covered, setCoveredState] = useState(false);
+  const setCovered = useCallback((c: boolean) => { setCoveredState(c); onCoverNav?.(c); }, [onCoverNav]);
+  const live = enabled && !covered;
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
   return (
     <>
@@ -44,17 +55,18 @@ export function AccountScreen({ enabled, lastFlash, onActivate, name, email }: A
           {initials}
         </div>
         <div className="flex w-full flex-col gap-2">
-          <EditableField target={ACCOUNT_EDIT_NAME} value={name} primary enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} />
-          <EditableField target={ACCOUNT_EDIT_EMAIL} value={email} enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} />
+          <EditableField target={ACCOUNT_EDIT_NAME} value={name} primary enabled={live} lastFlash={lastFlash} onActivate={onActivate} />
+          <EditableField target={ACCOUNT_EDIT_EMAIL} value={email} enabled={live} lastFlash={lastFlash} onActivate={onActivate} />
         </div>
         <Badge variant="secondary" className="px-3 py-1 text-[13px] font-medium">Free plan</Badge>
-        <ChatFocusable target={ACCOUNT_LOG_OUT} enabled={enabled} flashKey={lastFlash[ACCOUNT_LOG_OUT.id]} radius="rounded-2xl" className="mt-auto w-full" onActivate={onActivate}>
+        <ChatFocusable target={ACCOUNT_LOG_OUT} enabled={live} flashKey={lastFlash[ACCOUNT_LOG_OUT.id]} radius="rounded-2xl" className="mt-auto w-full" onActivate={onActivate}>
           <Button variant="outline" className="h-11 w-full gap-2 rounded-2xl text-[15px] font-normal">
             <LogOut className="size-4.5" /> Log out
           </Button>
         </ChatFocusable>
       </div>
-      <IsntSettingsPanel enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} style={place(SETTINGS_SPAN)} />
+      <IsntSettingsPanel enabled={enabled} lastFlash={lastFlash} onActivate={onActivate} style={place(SETTINGS_SPAN)} advancedHost={advancedHost} onCover={setCovered} />
+    <div ref={setAdvancedHost} className="pointer-events-none relative z-[5]" style={place(BLOCK_SPAN)} />
     </>
   );
 }

@@ -71,6 +71,8 @@ interface LevelDef {
   display: string[];
   defaultIndex: number;
   apply: (i: number, p: Patch) => void;
+  /** About controls (More › About controls): what this control does underneath — kept here, next to the steps it describes */
+  doc: { params: string; combine: string; defaults: string; range: string };
 }
 
 const HOLD_FACTORS = [0.6, 0.8, 1, 1.3, 1.6];
@@ -82,6 +84,7 @@ export const LEVELS: LevelDef[] = [
     explain: "How far the pointer moves when you move your head. Raise it if you have to turn a lot; lower it if the pointer overshoots.",
     display: ["1", "2", "3", "4", "5", "6", "7", "8"], defaultIndex: 3,
     apply: (i, p) => { p.thresholds.gridSensitivity = [0.45, 0.6, 0.75, 0.9, 1.1, 1.3, 1.55, 1.8][i]; },
+    doc: { params: "pointer sensitivity", combine: "Single parameter, 8 steps", defaults: "0.9 (step 4)", range: "0.45 – 1.8" },
   },
   {
     id: "steadiness", group: "Pointer movement", label: "Steadiness",
@@ -92,12 +95,14 @@ export const LEVELS: LevelDef[] = [
       p.thresholds.gridHysteresis = [0.2, 0.3, 0.4, 0.5, 0.6][i]; // how strongly the current button holds on to the pointer
       p.smoothing.head = [0.55, 0.45, 0.35, 0.28, 0.22][i]; // lower = smoother, calmer head signal
     },
+    doc: { params: "dead zone (head speed) · cell hysteresis · head smoothing", combine: "One step moves all three together. Steps 1–5: dead zone 0.10 / 0.18 / 0.25 / 0.35 / 0.45; hysteresis 0.20 / 0.30 / 0.40 / 0.50 / 0.60; smoothing 0.55 / 0.45 / 0.35 / 0.28 / 0.22 (lower is smoother)", defaults: "step 3 = 0.25 / 0.40 / 0.35", range: "dead zone ≤ 0.45, so the pointer can never freeze" },
   },
   {
     id: "holdToArm", group: "Pointer movement", label: "Hold to arm",
     explain: "How long you keep the pointer still on a button before it's ready to confirm. Raise it if buttons get ready too easily.",
     display: ["0.3 s", "0.4 s", "0.5 s", "0.65 s", "0.8 s", "1 s", "1.3 s"], defaultIndex: 2,
     apply: (i, p) => { p.thresholds.gazeHoldMs = [300, 400, 500, 650, 800, 1000, 1300][i]; },
+    doc: { params: "gaze hold", combine: "Single parameter, 7 steps", defaults: "500 ms", range: "300 – 1300 ms" },
   },
   {
     id: "headRange", group: "Head range", label: "Head range",
@@ -109,6 +114,7 @@ export const LEVELS: LevelDef[] = [
       p.thresholds.headPitchRangeDeg = Math.round(yaw * 0.75); // up/down is naturally a shorter movement
       p.thresholds.headRollRangeDeg = Math.round(yaw * 1.25);
     },
+    doc: { params: "yaw range · pitch range · roll range", combine: "Left/right range is set directly; up/down is 0.75× of it, head roll 1.25×", defaults: "20° (up/down 15°, roll 25°)", range: "left/right 12–30°, up/down 9–23°, roll 15–38°" },
   },
   {
     id: "scrollSpeed", group: "Head scroll", label: "Scroll speed",
@@ -118,12 +124,14 @@ export const LEVELS: LevelDef[] = [
       p.thresholds.scrollMaxSpeed = [400, 600, 900, 1300, 1800][i];
       p.thresholds.scrollPageIntervalMs = [500, 380, 220, 160, 110][i]; // lists that turn page by page (Recents)
     },
+    doc: { params: "max scroll speed · fastest page turn", combine: "Paired presets, one gets faster as the other gets shorter: 400 / 600 / 900 / 1300 / 1800 px/s with 500 / 380 / 220 / 160 / 110 ms", defaults: "900 px/s and 220 ms", range: "400–1800 px/s, 500–110 ms" },
   },
   {
     id: "scrollStart", group: "Head scroll", label: "Scroll start",
     explain: "How far you tilt your head before scrolling starts. Raise it if the page scrolls when you don't mean it to.",
     display: ["1", "2", "3", "4", "5", "6"], defaultIndex: 2,
     apply: (i, p) => { p.thresholds.scrollDeadzone = [0.06, 0.09, 0.12, 0.16, 0.2, 0.25][i]; },
+    doc: { params: "scroll dead zone (head tilt)", combine: "Single parameter, 6 steps", defaults: "0.12", range: "0.06 – 0.25" },
   },
   {
     id: "gestureStrength", group: "Gestures", label: "Gesture strength",
@@ -134,6 +142,7 @@ export const LEVELS: LevelDef[] = [
       p.thresholds.browRaiseThreshold = [0.35, 0.42, 0.5, 0.6, 0.7][i];
       p.thresholds.headGestureThreshold = [0.7, 0.78, 0.85, 0.9, 0.95][i];
     },
+    doc: { params: "mouth open threshold · brow raise threshold · head gesture threshold", combine: "One step moves all three: mouth 0.30–0.65, brows 0.35–0.70, head 0.70–0.95 of head range", defaults: "0.45 / 0.50 / 0.85", range: "those ranges" },
   },
   {
     id: "gestureHold", group: "Gestures", label: "Gesture hold",
@@ -146,7 +155,14 @@ export const LEVELS: LevelDef[] = [
       p.thresholds.longBlinkMs = Math.max(360, Math.round(D.longBlinkMs * f)); // always well above a natural blink
       p.thresholds.headGestureHoldMs = Math.round(D.headGestureHoldMs * f);
     },
+    doc: { params: "mouth hold · brow min duration · long blink · head gesture hold", combine: "One multiplier (×0.6 / ×0.8 / ×1 / ×1.3 / ×1.6) applied to all four defaults. Long blink never goes below 360 ms, so a normal blink can't trigger it", defaults: "×1 = 500 / 300 / 600 / 400 ms", range: "mouth 300–800, brows 180–480, long blink 360–960, head 240–640 ms" },
   },
+];
+
+/** the two flips aren't steppers (LEVELS) but belong in the same Advanced table */
+export const FLIP_DOCS = [
+  { label: "Flip left / right", group: "Head range", params: "invert yaw", combine: "Single on/off", defaults: "off", range: "on / off" },
+  { label: "Flip up / down", group: "Head range", params: "invert pitch", combine: "Single on/off", defaults: "off", range: "on / off" },
 ];
 
 /* ───────────── settings ───────────── */

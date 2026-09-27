@@ -276,6 +276,65 @@ input[type="range"] {
 }
 .chat-confirm-pulse { animation: chat-confirm-pulse 260ms cubic-bezier(0.16, 1, 0.3, 1); }
 
+/* ── ISNT settings: every interaction state distinct on the (small) settings controls ──────────────────────
+   Scoped to the settings panel; ChatFocusable exposes the states as data attributes. The rest of the app keeps
+   its quieter version (shadow + fill + pulse) — these add to it, they don't replace it. */
+/* focus: the pointer is on it — a thin ring on top of the usual lift. Only the small − / + steppers get it;
+   every other settings tile (tabs, gesture tiles, flips, …) keeps the app's own shadow + fill, like everywhere else. */
+.isnt-settings[data-tab="movement"] [data-target^="is-step-"][data-focused] {
+  outline: 2px solid color-mix(in oklch, var(--foreground) 45%, transparent);
+  outline-offset: 2px;
+}
+/* armed: the usual fill has reached the top — the ring goes solid */
+.isnt-settings[data-tab="movement"] [data-target^="is-step-"][data-armed] {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+}
+/* confirm: the usual scale pulse plus a quick bright flash over the whole control */
+.isnt-settings .chat-confirm-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--foreground);
+  animation: isnt-confirm-flash 260ms ease-out forwards;
+}
+@keyframes isnt-confirm-flash {
+  from { opacity: 0.35; }
+  to { opacity: 0; }
+}
+/* cooldown: dimmed, with a bar along the bottom draining until it can fire again (duration: --isnt-cooldown) */
+.isnt-settings [data-target][data-cooling] > [aria-hidden]:first-child + div {
+  opacity: 0.45;
+  transition: opacity 120ms ease-out;
+}
+.isnt-settings [data-target][data-cooling]::before {
+  content: "";
+  position: absolute;
+  inset: auto 8px 5px 8px;
+  z-index: 2;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 55%, transparent);
+  transform-origin: left center;
+  animation: isnt-cooldown-drain var(--isnt-cooldown, 650ms) linear forwards;
+}
+@keyframes isnt-cooldown-drain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+/* a value that just changed: a brief pop and highlight behind it */
+.isnt-value-pop {
+  animation: isnt-value-pop 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 6px;
+}
+@keyframes isnt-value-pop {
+  0% { transform: scale(1); background: transparent; }
+  20% { transform: scale(1.18); background: color-mix(in oklch, var(--foreground) 14%, transparent); }
+  100% { transform: scale(1); background: transparent; }
+}
+
 .chat-root {
   font-family: var(--font-chat);
   background: var(--background);

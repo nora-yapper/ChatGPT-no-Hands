@@ -109,6 +109,8 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
   const layoutKey = JSON.stringify([p.areaKey, p.screen, p.mode, p.phase, p.predictions, p.loading, canSend, p.canUndo, expandable, p.expanded, p.messages.length, p.sending]);
   useMeasuredGrid(p.areaRef, p.enabled, layoutKey, BASE_SNAP, blockRef);
   const gridEnabled = p.enabled && !p.expanded;
+  /** a full-screen popup on Account (More › About controls) covers the tabs: they stop being head targets */
+  const [navCovered, setNavCovered] = useState(false);
   const isNew = p.screen === "new";
   const reading = isNew && p.mode === "read";
   const composing = isNew && p.mode === "compose";
@@ -206,7 +208,7 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
       );
     }
     if (p.screen === "recents") return <RecentsScreen enabled={p.enabled} lastFlash={p.lastFlash} onActivate={p.onActivate} onOpenChat={p.onOpenChat} currentChatId={p.currentChatId} onNewChatInProject={p.onNewChatInProject} />;
-    if (p.screen === "account") return <AccountScreen enabled={p.enabled} lastFlash={p.lastFlash} onActivate={p.onActivate} name={p.accountName} email={p.accountEmail} />;
+    if (p.screen === "account") return <AccountScreen enabled={p.enabled} lastFlash={p.lastFlash} onActivate={p.onActivate} name={p.accountName} email={p.accountEmail} onCoverNav={setNavCovered} />;
     // `out`: rendered with a fresh key, deliberately — ChatFocusable renders an entirely different element
     // tree once `enabled` goes false, so it *cannot* smoothly transition in place; it needs a real mount-time
     // animation (`animate-out`) rather than a transition, which would just jump straight to its end state
@@ -337,7 +339,7 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
           const active = p.screen === s;
           const Icon = s === "new" ? SquarePen : s === "recents" ? Clock : User;
           return (
-            <ChatFocusable key={t.id} target={t} enabled={p.enabled} flashKey={p.lastFlash[t.id]} radius="rounded-2xl" className={cn("transition-colors", active ? "bg-accent" : "bg-background ring-1 ring-border")} style={place(BASE_PLACEMENT.nav(i))} onActivate={p.onActivate}>
+            <ChatFocusable key={t.id} target={t} enabled={p.enabled && !navCovered} flashKey={p.lastFlash[t.id]} radius="rounded-2xl" className={cn("transition-colors", active ? "bg-accent" : "bg-background ring-1 ring-border")} style={place(BASE_PLACEMENT.nav(i))} onActivate={p.onActivate}>
               <Button variant="ghost" aria-current={active ? "page" : undefined} className={cn(CELL, "gap-2 text-[15px] hover:bg-transparent", active ? "font-medium text-foreground" : "text-muted-foreground")}>
                 <Icon className="size-5" /> {t.label}
               </Button>

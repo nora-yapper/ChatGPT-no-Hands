@@ -50,12 +50,15 @@ export function TransitIndicator() {
 
   return (
     <>
-      {/* z-3/z-4: above the plain grid cells (which set no z-index of their own) but below any in-place
-          overlay panel that covers the grid while open (Recents menu, expanded prompt — both z-[5]) */}
-      <div ref={cellRef} className="pointer-events-none absolute z-[3] rounded-2xl bg-foreground transition-opacity duration-100" style={{ opacity: 0 }} aria-hidden />
+      {/* z-46/47: above everything the pointer can be over, including in-place popups (Recents menu, settings
+          chooser / More, expanded prompt — all z-[5]); what an open popup covers is no longer a head target,
+          so the pointer is always over something visible and must be drawn on top of it. Below the pick glide
+          ghost (z-50) and the keyboard modals (z-40 — while one is open this indicator isn't rendered; the
+          modal draws its own). */}
+      <div ref={cellRef} className="pointer-events-none absolute z-[46] rounded-2xl bg-foreground transition-opacity duration-100" style={{ opacity: 0 }} aria-hidden />
       <div
         ref={dotRef}
-        className="pointer-events-none absolute z-[4] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        className="pointer-events-none absolute z-[47] -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{ display: "none", width: 10, height: 10, background: "var(--foreground)", boxShadow: "0 0 0 2px var(--background), 0 1px 4px rgba(0,0,0,0.25)" }}
         aria-hidden
       />

@@ -331,3 +331,175 @@ Implemented as planned. The Input Lab's settings and panel are unchanged (no dif
 - **Code:** removed `SB_SETTINGS` and the `toggleSettings` handler from `SidebarControls.tsx`. `SidebarToggles` became `SidebarThemeToggle`, one full-width "Dark mode" / "Light mode" tile.
 - **Checked:** the sidebar fields are now `sb-close`, `sb-go-lab`, `sb-go-chat` and `sb-theme`, and the theme tile still switches the theme. Lint is clean; 92 tests pass.
 
+
+---
+
+# Round 3: settings screen polish
+
+## Work order
+
+10 → 11 → 12 → 13
+
+## Dependencies and overlaps
+
+- **10, 11 and 12 all edit `components/ChatNoHands/IsntSettingsPanel.tsx`**, the only file for this round, plus settings-scoped rules in `globals.css`. The shared `ChatFocusable` is **not** changed: it already exposes every state as a data attribute (`data-focused`, `data-armed`, `data-confirming`, `data-cooling`) and a confirm-pulse class. The settings screen styles those under its own scope (`.isnt-settings`), so the rest of the app is untouched.
+- **10 before 11:** 11 adds a new source for the explanation strip (the card under the pointer). The strip's fixed height has to be computed over *every* text it can show, so the mechanism comes first.
+- **11 before 12:** the requirement is that color never competes with the focus / armed / confirm / cooldown feedback. So the state feedback is settled first, and color is added afterwards and judged against it.
+- **13** is an answer only (no code). Last, so it describes the final screen.
+
+## 10. [x] Settings descriptions: fixed height, no layout shift
+
+> The description section's height changes with the focused setting, so the layout jumps. Give it a fixed height sized to the longest description (not a guess), responsive to the viewport but constant at a given size. Keep text readable on small screens instead of letting the box grow. Nothing else may move.
+
+**Touches:** the explanation strip in `IsntSettingsPanel.tsx`.
+**Cause:** the strip is a `<p>` with `min-h-[2.75rem]`, so a longer text adds lines and the flex column above it shrinks, moving every tile.
+**Approach:**
+- **Measure with CSS, not a guess:** render *every* text the strip can show (all explanations, and the longest variant of each notice) invisibly, stacked in the same grid cell as the visible one. The grid cell's height is then the tallest text at the current width, automatically and responsively. It never changes when focus changes.
+- **Hidden copies** are `aria-hidden` and `visibility: hidden`.
+- **Font:** size set with `clamp()` against the viewport, so small screens get slightly smaller text rather than a taller box.
+- **Check:** measure the strip's and every tile's rects while focus moves across all settings. Nothing may move.
+
+**Done.**
+- **How the height is fixed:** the strip is now a one-cell CSS grid. Every text it can ever show (all explanations, the three blocked-gesture variants of every gesture, and every "moved from" / trial / preset / reset notice, `STRIP_TEXTS`) is stacked invisibly (`aria-hidden`, `visibility: hidden`) in that cell, under the visible one. The box is therefore exactly as tall as the longest text at the current width, measured by layout rather than guessed. It only changes with the viewport, never with focus.
+- **Font:** `clamp(11px, 0.45vw + 7px, 13px)`, so narrow screens get slightly smaller text rather than a taller box.
+- **Cleanup:** the notice builders became named functions (`trialNotice`, `movedNotice`, …) so they can be enumerated.
+- **Checked:** moved the mouse over every tile in all four views (Gestures, Movement, a shortcut chooser, the Confirm chooser) at 1440×900 and 1024×700, 78 pointer positions each. Strip height: 51.8 px and 63.9 px respectively, constant throughout. No text clipped. No tile moved.
+- **Noticed, not changed** (out of scope): at 1024×700 the tiles are slightly too short for their two-line content (45 px of content in a 40 px tile), so it's clipped a little. That's panel sizing on short viewports, worth a follow-up.
+
+## 11. [x] Settings: clear feedback for every interaction state
+
+> 1. Highlight the whole setting card under the pointer, statically (not the arming fill: the card isn't clickable, only its − / + are). 2. Clearly distinct focus / armed (fill progress) / confirm (brief flash or pulse) / cooldown (visibly inactive until it can fire again) on every interactive settings button. Show the changed value after each − / + press. Consistent with the rest of the app, light and dark.
+
+**Touches:** `IsntSettingsPanel.tsx`, and settings-scoped CSS in `globals.css`.
+**Current state:** `ChatFocusable` gives focus a soft shadow, dwell a rising fill, confirm a 260 ms scale pulse (barely visible on the small − / + tiles), and cooldown only the fill easing out. Nothing says "inactive", so a quick second press seems to be ignored. The card has no highlight at all.
+**Approach:**
+- **Card highlight:** the card counts as "under the pointer" when the Grid Glide cursor is inside its rectangle (read each frame from the grid status and area rect, as the transit dot does), when its − or + is focused, or on mouse hover. It shows a static tinted background and outline, with no fill. The explanation strip follows the card too.
+- **Focus:** keep the app's lift shadow, and add a thin outline ring in the foreground color, so it reads on small tiles.
+- **Armed:** keep the app's bottom-up fill, which is already the "progress" everywhere else.
+- **Confirm:** the app's pulse, plus a short bright flash overlay (~300 ms) on the tile.
+- **Cooldown:** while `data-cooling` is set, the tile is dimmed and a thin bar along its bottom drains over the cooldown time, so it visibly isn't ready yet. Mouse clicks don't go through the FSM, so they have no cooldown.
+- **Changed value:** after − / +, the value text briefly scales up and gets a highlight background (keyed on the value, so it replays on every change).
+
+**Done.** Styles are scoped to `.isnt-settings` in `globals.css`; the shared `ChatFocusable` is untouched, so the rest of the app keeps its quieter version.
+- **Focus:** the usual lift shadow, plus a thin 45 % foreground ring.
+- **Armed:** the usual bottom-up fill reaches the top, and the ring goes solid.
+- **Confirm:** the usual scale pulse, plus a 260 ms bright flash over the control (`::after`).
+- **Cooldown** (`data-cooling`): the content dims to 45 %, and a 3 px bar along the bottom drains over exactly the cooldown time (`--isnt-cooldown` = hold-visible + `cooldownMs`), so a quick second press visibly isn't ready yet. Mouse clicks bypass the FSM and have no cooldown.
+- **Changed value:** after − / + the value pops (scale 1.18) with a brief highlight behind it. It's keyed on a per-setting press counter, so it replays on every press but not when you switch tabs.
+- **Card highlight:** static (no fill), an outline ring and a faint tint, shown when the Grid Glide cursor is inside the card (read per frame from the grid status and area rect; cards aren't targets), when one of its − / + is focused, or on mouse hover. The explanation strip follows the card too.
+  - A first attempt used `bg-muted`, which is the tile color in both themes and hid the − / + edges, so it became a ring.
+- **Checked:** contact sheets in light and dark mode, with states forced on a − / + tile via the same data attributes and classes: rest / focused / armed / confirm / cooldown, plus the value pop after a press and a card highlighted by placing the glide cursor over it. Lint is clean; tests pass.
+
+## 12. [x] Settings: color
+
+> The settings screen is too plain. Give each group an accent color (header, icon or card edge), use accents in the gesture options so gestures and actions are easy to recognize, and tint the − / + or value displays. Balanced: color supports orientation and must not compete with focus / armed / confirm feedback. Readable in light and dark.
+
+**Touches:** `IsntSettingsPanel.tsx` styles only.
+**Approach:** reuse the app's pastel palette tokens (`--pastel-N` surfaces, `--pastel-fill-N` fills). They're already tuned for both themes, and the dwell fill of a tinted control already uses its hue, as on the compass.
+- **Movement groups:** Pointer movement = sky, Head range = mint, Head scroll = peach, Gestures (strength/hold) = lavender. Each card gets its group's color as a left edge and a small group label. Its − / + are tinted with the group pastel, so their fill rises in the group hue. The value pips use the group color.
+- **Gestures tab:** each *gesture* gets a fixed hue, used on a small color dot wherever it appears (action tiles, chooser). The same gesture looks the same everywhere. The Confirm tile gets a stronger rose edge, since it's the one that matters most.
+- **Balance:** surfaces stay pale pastels at the lightness already used on the compass. The strongest color on screen is still the saturated fill (armed), the confirm flash and the focus ring.
+- **Check:** screenshots in both themes, and a forced armed / cooldown state on tinted tiles.
+
+**Done** (`IsntSettingsPanel.tsx` only). Colors come from the app's pastel tokens, so both themes are covered.
+- **Movement groups:** each has an accent. Pointer movement = sky, Head range = mint (with the flips), Head scroll = peach, Gestures = lavender. It appears as the card's 4 px left edge, a dot before the group label, the value pips (filled in the saturated hue, empty in the pale one) and the − / + tiles. Those are pastel surfaces whose dwell fill rises in the group hue, like the compass.
+- **Gesture colors:** each gesture has one hue wherever it appears, with left/right pairs sharing one. Mouth = rose, brows = butter, long blink = periwinkle, turn = lime, tilt = sky, head-to-shoulder = lilac. Action tiles take the color of their assigned gesture (unassigned ones stay neutral), and show a colored dot. The chooser shows each gesture tile in its own color. The Confirm tile's label is set in bold caps.
+- **Disabled tiles** fade as a whole, surface included. The current choice stays readable.
+- **Balance:** surfaces stay pale. The strongest signals are still the saturated arming fill, the foreground focus / armed rings, the confirm flash and the cooldown bar. Checked on a tinted tile with a forced armed / confirm / cooldown state.
+- **Bug found and fixed:** the "active" ring on the selected tab and the current choice was clipped by the focusable wrapper (it was drawn outside), so the active tab wasn't visible. It's now `ring-inset`.
+- **Checked:** Gestures, Movement and the chooser screenshotted in light and dark mode, plus the state sheet. The issue 10 layout-stability run is still 0 changes at both sizes. Lint is clean; tests pass.
+
+**Follow-up (feedback on 12):**
+- **Flips:** Flip left/right and Flip up/down now use the Projects panel's purple (`PHRASE_TINT`, lavender) instead of mint.
+- **Accents removed:** the 4 px group edge on the Movement cards and the colored dots before the group titles are gone. The group colors remain on the − / + tiles and the value pips.
+- **Gesture dots:** removed on the Gestures tab too (action tiles and chooser). Each gesture keeps its color only as the tile's surface.
+- **Gestures tab outlines:** the focus/armed outlines (added in 11) no longer appear there. Those tiles show the app's own shadow and fill, as everywhere else. The outlines are now scoped to the Movement tab's small − / + steppers (`.isnt-settings[data-tab="movement"]`).
+- **Checked:** screenshots in both themes; the computed outline on a forced-focus gesture tile is `none`. Lint is clean; tests pass.
+
+## 13. [x] Explain how the original settings map to the ISNT settings
+
+> No code changes. Answer in a message: for each displayed setting, its name and group, which original parameters it controls, how they're combined, and its default and safe range. Then the dropped/hidden settings (and why), and those still exposed as they were.
+
+**Approach:** answered in chat from `isnt/isntSettings.ts` (the source of truth) once 10–12 are done. Only this checkbox is updated here.
+
+**Done.** Answered in chat, from `isnt/isntSettings.ts`. No code changes.
+
+
+## 14. [x] Settings: "More" button and popup
+
+> A "More" button in the bottom right corner of the settings section opens a popup (the same one as for projects) with: Colour legend (what the color split means), Technicalities (empty for now), Advanced settings (empty for now), and Close.
+
+**Done.**
+- **Shared popup:** Recents' chat and project menu was extracted into `components/ChatNoHands/TilePanel.tsx`: a small title, big head-selectable tiles, Close always last. Given content, it shows a single row of tiles underneath it. Recents' menus and the settings "More" popup both use it.
+  - The shared panel sits on the page background. The old Recents menu used `bg-card`, which in dark mode is the same color as its tiles, so they were invisible; they're readable now.
+- **More tile:** the bottom row of the settings panel is now the explanation strip plus a More tile in the corner, stretched to the strip's height.
+  - The strip keeps its fixed height (it's measured by layout): constant 51.8 px at 1440×900 and 79.8 px at 1024×700 (narrower now) across 82 pointer positions. Nothing moved.
+- **Popup:** it covers the tab body, like the gesture chooser. Anything under it stops being a head target; the tabs and More stay live.
+  - **Menu:** Colour legend · Technicalities · Advanced settings · Close.
+  - **Colour legend:** two columns. Movement groups (pointer movement, head range, head scroll, gestures, and the flip switches in the Projects purple), and gesture colors (grey = no gesture). Each row has a swatch and a plain-language meaning, drawn from the same color maps the screen uses. Back and Close sit underneath.
+  - **Technicalities / Advanced settings:** empty pages with Back and Close, as asked.
+- **Checked:**
+  - The grid fields: while the popup is open, only its tiles plus the tabs and More are targets. After Close, the steppers are back.
+  - Screenshots in both themes, including the Recents menu in dark mode.
+  - Lint is clean; tests pass.
+
+**Follow-up (tabs):**
+- **Gestures / Movement tabs:** no outline any more. They're styled like the New chat / Recents / Account tabs: the selected one gets the darker grey fill (`bg-accent`, medium weight), and the other has a hairline border and muted text.
+- **Focus outline:** now limited to the − / + steppers (`[data-target^="is-step-"]`), so no other settings tile shows it.
+- **Checked:** screenshots in both themes. Lint is clean; tests pass.
+
+## 15. [x] Head pointer hidden behind settings popups
+
+> When the popup in settings gestures shows up, my pointer is hidden behind it.
+
+**Done.**
+- **Cause:** the pointer's transit dot (`TransitIndicator`) and its cell tint were deliberately at z 3 / 4, *below* in-place popups (z 5). But whatever an open popup covers stops being a head target, so the pointer is always over the popup's own tiles, and it was drawn underneath them. This affected the gesture chooser, the More popup and the Recents menus.
+- **Fix:** the dot and tint are now at z 47 / 46, above every in-place popup. They stay below the pick glide ghost (z 50). The keyboard modals (z 40) draw their own pointer inside their layer, and the window-level one isn't rendered while they're open.
+- **Checked:** screenshots with the glide cursor placed over a chooser tile (light) and a More tile (dark): the dot and cell tint are on top. Lint is clean; tests pass.
+
+**Follow-up (legend explains shared colours):**
+- **The legend now explains grouping.** A colour marks a group, not an individual gesture or setting.
+  - **Movement column** ("one colour per group"): each group lists the settings it contains, e.g. Pointer movement: Pointer speed, Steadiness, Hold to arm. The flips are noted as the Projects purple.
+  - **Gestures column** ("one colour per kind of movement"): tiles take their gesture's colour, and mirrored head movements share one because they're the same movement in two directions (turning, tilting, head to a shoulder). The three face gestures sit on one row with three swatches, "one colour each". Grey means no gesture.
+- **Room on short screens:**
+  - The More popup now covers the whole settings panel (the tabs and More become inactive while it's open) instead of just the tab body.
+  - Its Back/Close row height and the legend's text size and spacing scale with viewport height.
+  - Nothing is clipped at 1440×900 (light and dark) or at 1024×700.
+- **Checked:** screenshots at both sizes, plus a clipping check. While the popup is open, only its tiles are head targets. Lint is clean; tests pass.
+
+**Follow-up (flips light grey):**
+- **Flips:** Flip left/right and Flip up/down now use the plain light-grey secondary surface (dark grey in dark mode) instead of the Projects purple. That drops `FLIP_TINT`.
+- **Legend:** the row now reads "Flip switches — light grey: on/off switches, not part of a group".
+- **Checked:** screenshots in both themes. The legend still fits at 1440×900 and 1024×700. Lint is clean; tests pass.
+
+**Follow-up (legend text trimmed):**
+- **Headings:** now just "Movement tab" and "Gestures tab".
+- **Rows:** every "— …" detail is gone; each row is a swatch and a name. Movement: Pointer movement, Head range, Head scroll, Gestures. Gestures: Face gestures (three swatches), Turning, Tilting, Head to a shoulder.
+- **Removed rows:** Grey and Flip switches. The now-unused `GROUP_MEMBERS` map is deleted.
+- **Kept:** the one-line note under each heading, which is what explains why colours are shared.
+- **Checked:** screenshots; no clipping at 1440×900 or 1024×700. Lint is clean; tests pass.
+
+## 16. [x] Advanced settings: what each Movement setting changes underneath
+
+> In Advanced settings, display the Movement tab mapping from the earlier answer (issue 13's table). It will probably need the whole-screen popup.
+
+**Done.**
+- **Content:** More › Advanced settings now shows the issue 13 table: Setting, Original parameters it controls, How they're combined, Default, Safe range. The settings are grouped under section rows (Pointer movement, Head range, Head scroll, Gestures), with both flips under Head range. The intro sentence about safe limits and Input Lab values sits above the table.
+  - The text lives next to each control's actual steps in `isntSettings.ts` (`LevelDef.doc`, `FLIP_DOCS`), so it can't drift from the values it describes.
+  - The pasted table had truncated cells, so the wording comes from the source.
+- **Full-screen popup:** it's portalled into a host that Account places over the whole screen block, tabs included (grid rows 1–17). While it's open, the profile card, the settings panel and the New chat / Recents / Account tabs all stop being head targets; only Back and Close remain. The cover is reported up (`onCover` → `onCoverNav`) and cleared on unmount, so leaving Account with it open (e.g. via the sidebar) doesn't leave the tabs off.
+  - Back returns to the More menu; Close closes it.
+  - The shared `TilePanel` gained `tilesClassName`, for a lower Back / Close row here.
+- **Fit:** the table takes 488 px of its 569 px box at 1440×900, so no scrolling. On shorter screens (1024×700: 646 px in 387 px) it scrolls, and it's registered as the head-scroll target while open, so the app's own head scroll moves it.
+- **Bug found and fixed:** a duplicate React key. "Head range" is both a group and a setting name, which showed as "2 Issues" in the dev overlay. The console is clean now.
+- **Checked:**
+  - Screenshots in both themes.
+  - The nav fields are 0 while the popup is open and 3 after Back, Close, or leaving via the sidebar.
+  - Lint is clean; tests pass.
+
+**Follow-up (renamed):**
+- **Renamed:** "Advanced settings" is now "About controls": the More menu tile, the popup title, and the explanation strip texts (including the More tile's own description) and code comments.
+- **Unchanged:** internal ids (`is-more-advanced`, `IS_ADV_*`).
+- **Checked:** a screenshot of the menu; the table still fits; the console is clean. Tests pass.
+
+**Follow-up (intro text):** About controls' intro now says what the table shows: "What each Movement setting adjusts behind the scenes: the tracking values it controls, how they change together, its default, and the safe range it stays within." The table still fits (488 of 586 px at 1440×900), and the console is clean.
