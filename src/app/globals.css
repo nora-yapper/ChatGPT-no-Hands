@@ -206,17 +206,22 @@ input[type="range"] {
   --pastel-9: oklch(0.955 0.04 355);  /* blush */
   --pastel-ink: #0d0d0d;
 
-  /* same hues, pushed to a richer lightness/chroma — the dwell-fill colour for a pastel-tinted control */
-  --pastel-fill-0: oklch(0.74 0.135 20);
-  --pastel-fill-1: oklch(0.76 0.135 55);
-  --pastel-fill-2: oklch(0.78 0.14 90);
-  --pastel-fill-3: oklch(0.76 0.135 135);
-  --pastel-fill-4: oklch(0.74 0.11 175);
-  --pastel-fill-5: oklch(0.72 0.11 215);
-  --pastel-fill-6: oklch(0.72 0.11 255);
-  --pastel-fill-7: oklch(0.72 0.13 295);
-  --pastel-fill-8: oklch(0.74 0.13 330);
-  --pastel-fill-9: oklch(0.75 0.135 355);
+  /* same hues, a step deeper and more saturated — the dwell/armed fill for a pastel-tinted control. Kept
+     light (L ≈ 0.82–0.87) so arming reads as the pastel intensifying, not darkening. */
+  --pastel-fill-0: oklch(0.82 0.095 20);
+  --pastel-fill-1: oklch(0.83 0.1 55);
+  --pastel-fill-2: oklch(0.87 0.15 90);
+  --pastel-fill-3: oklch(0.87 0.15 135);
+  --pastel-fill-4: oklch(0.86 0.13 175);
+  --pastel-fill-5: oklch(0.84 0.11 215);
+  --pastel-fill-6: oklch(0.82 0.085 255);
+  --pastel-fill-7: oklch(0.82 0.095 295);
+  --pastel-fill-8: oklch(0.83 0.13 330);
+  --pastel-fill-9: oklch(0.82 0.1 355);
+
+  /* Send: no hue, so it progresses by value instead — dark gray at rest, filling to black as it arms */
+  --send-bg: #5d5d5d;
+  --send-fill: #0d0d0d;
 }
 .chat-root.dark {
   --pastel-0: oklch(0.34 0.05 20);
@@ -242,6 +247,10 @@ input[type="range"] {
   --pastel-fill-7: oklch(0.53 0.125 295);
   --pastel-fill-8: oklch(0.55 0.125 330);
   --pastel-fill-9: oklch(0.56 0.13 355);
+
+  /* Send is inverted (light) in dark mode: light gray at rest, filling to white as it arms */
+  --send-bg: #b4b4b4;
+  --send-fill: #ffffff;
 }
 /* a pastel field: tint from --tint, deepened slightly on hover */
 .pastel {
@@ -251,6 +260,11 @@ input[type="range"] {
 }
 .pastel:hover {
   background-color: color-mix(in oklch, var(--tint), var(--pastel-ink) 6%);
+}
+/* the Send control: its own gray→black fill instead of the opaque primary button (see NoHandsScreen) */
+.send-control {
+  background-color: var(--send-bg);
+  --fill: var(--send-fill);
 }
 /* the single confirm pulse (see ChatFocusable): a brief pop, once, never a repeating/decorative animation */
 @keyframes chat-confirm-pulse {

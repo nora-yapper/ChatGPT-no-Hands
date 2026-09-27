@@ -301,8 +301,8 @@ export function NoHandsScreen(p: NoHandsScreenProps) {
             )}
           </div>
         </ChatFocusable>
-        <ChatFocusable target={BAR_SEND} enabled={p.enabled && composing && canSend} flashKey={p.lastFlash[BAR_SEND.id]} radius="rounded-2xl" className={cn(!composing && "invisible")} style={place(BASE_PLACEMENT.bar.send)} onActivate={p.onActivate}>
-          <Button aria-label="Send" disabled={!canSend} className={cn(CELL, "flex-col gap-1.5 text-[15px] disabled:opacity-20")}>
+        <ChatFocusable target={BAR_SEND} enabled={p.enabled && composing && canSend} flashKey={p.lastFlash[BAR_SEND.id]} radius="rounded-2xl" className={cn("send-control", !composing && "invisible", !canSend && "opacity-20")} style={place(BASE_PLACEMENT.bar.send)} onActivate={p.onActivate}>
+          <Button aria-label="Send" disabled={!canSend} className={cn(CELL, "flex-col gap-1.5 bg-transparent text-[15px] hover:bg-transparent disabled:opacity-100")}>
             <ArrowUp className="size-6" strokeWidth={2.5} /> Send
           </Button>
         </ChatFocusable>
