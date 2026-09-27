@@ -1,0 +1,271 @@
+@import "tailwindcss";
+
+:root {
+  --lab-bg: #0a0e13;
+  --lab-panel: #10161d;
+  --lab-panel-2: #161e27;
+  --lab-border: #22303c;
+  --lab-fg: #d7dee6;
+  --lab-dim: #7b8794;
+  --lab-accent: #22d3ee;
+  --lab-armed: #f59e0b;
+  --lab-confirm: #a78bfa;
+  --lab-ok: #34d399;
+  --lab-warn: #fbbf24;
+  --lab-bad: #f87171;
+}
+
+@theme inline {
+  --color-lab-bg: var(--lab-bg);
+  --color-lab-panel: var(--lab-panel);
+  --color-lab-panel-2: var(--lab-panel-2);
+  --color-lab-border: var(--lab-border);
+  --color-lab-fg: var(--lab-fg);
+  --color-lab-dim: var(--lab-dim);
+  --color-lab-accent: var(--lab-accent);
+  --color-lab-armed: var(--lab-armed);
+  --color-lab-confirm: var(--lab-confirm);
+  --color-lab-ok: var(--lab-ok);
+  --color-lab-warn: var(--lab-warn);
+  --color-lab-bad: var(--lab-bad);
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--lab-bg);
+  color: var(--lab-fg);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--lab-border) transparent;
+}
+
+input[type="range"] {
+  accent-color: var(--lab-accent);
+}
+
+@keyframes lab-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
+  50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+}
+.lab-pulse {
+  animation: lab-pulse 1s ease-out infinite;
+}
+@keyframes lab-flash {
+  0% { background-color: rgba(52, 211, 153, 0.6); }
+  100% { background-color: transparent; }
+}
+.lab-flash {
+  animation: lab-flash 0.6s ease-out;
+}
+
+/* ───────────────────────────── ChatGPT no Hands theme ─────────────────────────────
+   shadcn tokens scoped to the chat interface. Values follow ChatGPT's neutral palette:
+   light  #ffffff / #f9f9f9 / #f4f4f4 / #e5e5e5, text #0d0d0d
+   dark   #212121 / #171717 / #2f2f2f, text #ececec
+   Type is the native grotesque stack (system-ui → Helvetica → Arial). */
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+
+.chat-root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+  --card: #ffffff;
+  --card-foreground: #0d0d0d;
+  --popover: #ffffff;
+  --popover-foreground: #0d0d0d;
+  --primary: #0d0d0d;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f4;
+  --secondary-foreground: #0d0d0d;
+  --muted: #f4f4f4;
+  --muted-foreground: #5d5d5d;
+  --accent: #ececec;
+  --accent-foreground: #0d0d0d;
+  --destructive: #ef4146;
+  --border: #e5e5e5;
+  --input: #dcdcdc;
+  --ring: #0d0d0d;
+  --sidebar: #f9f9f9;
+  --sidebar-foreground: #0d0d0d;
+  --sidebar-border: #ececec;
+  --composer: #ffffff;
+  --composer-border: #e5e5e5;
+  --radius: 0.75rem;
+
+  /* recolour the shared pointer / grid overlays to the monochrome palette */
+  --lab-accent: #8f8f8f;
+  --lab-armed: #0d0d0d;
+  --lab-confirm: #0d0d0d;
+  --lab-border: #e5e5e5;
+
+  /* head-tracking lifecycle feedback on the focusable control itself (see ChatFocusable) */
+  --chat-shadow-focus: 0 2px 10px rgba(13, 13, 13, 0.1);
+  --chat-shadow-armed: 0 4px 18px rgba(13, 13, 13, 0.22);
+  --chat-fill-neutral: #d8d8d8; /* dwell fill for a plain (uncoloured) control */
+}
+.chat-root.dark {
+  color-scheme: dark;
+  --background: #212121;
+  --foreground: #ececec;
+  --card: #2f2f2f;
+  --card-foreground: #ececec;
+  --popover: #2f2f2f;
+  --popover-foreground: #ececec;
+  --primary: #ececec;
+  --primary-foreground: #0d0d0d;
+  --secondary: #2f2f2f;
+  --secondary-foreground: #ececec;
+  --muted: #2f2f2f;
+  --muted-foreground: #b4b4b4;
+  --accent: #424242;
+  --accent-foreground: #ececec;
+  --destructive: #f87171;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #ececec;
+  --sidebar: #171717;
+  --sidebar-foreground: #ececec;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --composer: #2f2f2f;
+  --composer-border: rgba(255, 255, 255, 0.1);
+
+  --lab-accent: #8f8f8f;
+  --lab-armed: #ececec;
+  --lab-confirm: #ececec;
+  --lab-border: rgba(255, 255, 255, 0.1);
+
+  /* dark elevation reads as a light glow, not a black shadow, against the near-black chat surfaces */
+  --chat-shadow-focus: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 2px 10px rgba(0, 0, 0, 0.45);
+  --chat-shadow-armed: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 4px 18px rgba(0, 0, 0, 0.55);
+  --chat-fill-neutral: #6b6b6b; /* lighter than the dark control surfaces (#2f2f2f / #424242) for contrast */
+}
+
+/* pins a subtree's tokens to the light values regardless of an ancestor .dark chat-root, so a card that
+   must always read as a white sheet (e.g. a project card) stays legible instead of going dark-on-dark */
+.card-force-light {
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+  --muted: #f4f4f4;
+  --muted-foreground: #5d5d5d;
+  --border: #e5e5e5;
+  color: var(--foreground);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-composer: var(--composer);
+  --color-composer-border: var(--composer-border);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-chat: ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+/* Soft pastel rainbow for the hands-free controls. Index = hue step; the compass keeps one hue per position. */
+.chat-root {
+  --pastel-0: oklch(0.955 0.04 20);   /* rose */
+  --pastel-1: oklch(0.96 0.045 55);   /* peach */
+  --pastel-2: oklch(0.965 0.05 90);   /* butter */
+  --pastel-3: oklch(0.96 0.045 135);  /* lime */
+  --pastel-4: oklch(0.955 0.04 175);  /* mint */
+  --pastel-5: oklch(0.955 0.04 215);  /* sky */
+  --pastel-6: oklch(0.955 0.04 255);  /* periwinkle */
+  --pastel-7: oklch(0.955 0.04 295);  /* lavender */
+  --pastel-8: oklch(0.955 0.04 330);  /* lilac */
+  --pastel-9: oklch(0.955 0.04 355);  /* blush */
+  --pastel-ink: #0d0d0d;
+
+  /* same hues, pushed to a richer lightness/chroma — the dwell-fill colour for a pastel-tinted control */
+  --pastel-fill-0: oklch(0.74 0.135 20);
+  --pastel-fill-1: oklch(0.76 0.135 55);
+  --pastel-fill-2: oklch(0.78 0.14 90);
+  --pastel-fill-3: oklch(0.76 0.135 135);
+  --pastel-fill-4: oklch(0.74 0.11 175);
+  --pastel-fill-5: oklch(0.72 0.11 215);
+  --pastel-fill-6: oklch(0.72 0.11 255);
+  --pastel-fill-7: oklch(0.72 0.13 295);
+  --pastel-fill-8: oklch(0.74 0.13 330);
+  --pastel-fill-9: oklch(0.75 0.135 355);
+}
+.chat-root.dark {
+  --pastel-0: oklch(0.34 0.05 20);
+  --pastel-1: oklch(0.34 0.05 55);
+  --pastel-2: oklch(0.34 0.05 90);
+  --pastel-3: oklch(0.34 0.05 135);
+  --pastel-4: oklch(0.34 0.05 175);
+  --pastel-5: oklch(0.34 0.05 215);
+  --pastel-6: oklch(0.34 0.05 255);
+  --pastel-7: oklch(0.34 0.05 295);
+  --pastel-8: oklch(0.34 0.05 330);
+  --pastel-9: oklch(0.34 0.05 355);
+  --pastel-ink: #ececec;
+
+  /* lighter and more saturated than the dark-mode pastel background, so the fill still reads while rising */
+  --pastel-fill-0: oklch(0.55 0.13 20);
+  --pastel-fill-1: oklch(0.57 0.13 55);
+  --pastel-fill-2: oklch(0.59 0.135 90);
+  --pastel-fill-3: oklch(0.57 0.13 135);
+  --pastel-fill-4: oklch(0.55 0.105 175);
+  --pastel-fill-5: oklch(0.53 0.105 215);
+  --pastel-fill-6: oklch(0.53 0.105 255);
+  --pastel-fill-7: oklch(0.53 0.125 295);
+  --pastel-fill-8: oklch(0.55 0.125 330);
+  --pastel-fill-9: oklch(0.56 0.13 355);
+}
+/* a pastel field: tint from --tint, deepened slightly on hover */
+.pastel {
+  background-color: var(--tint);
+  color: var(--pastel-ink);
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+.pastel:hover {
+  background-color: color-mix(in oklch, var(--tint), var(--pastel-ink) 6%);
+}
+/* the single confirm pulse (see ChatFocusable): a brief pop, once, never a repeating/decorative animation */
+@keyframes chat-confirm-pulse {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.045); }
+  100% { transform: scale(1); }
+}
+.chat-confirm-pulse { animation: chat-confirm-pulse 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+.chat-root {
+  font-family: var(--font-chat);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+.chat-root * {
+  scrollbar-color: var(--border) transparent;
+}
