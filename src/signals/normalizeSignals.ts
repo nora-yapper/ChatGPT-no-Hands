@@ -21,6 +21,7 @@ export interface RawHead {
 export function rawHead(frame: TrackingFrame): RawHead | null {
   if (!frame.faceDetected || frame.landmarks.length === 0) return null;
   const pose =
+    frame.stablePose ??
     (frame.headMatrix ? headPoseFromMatrix(frame.headMatrix) : null) ?? headPoseFromLandmarks(frame.landmarks);
   if (!pose) return null;
   const nose = frame.landmarks[LM.noseTip] ?? frame.landmarks[0];

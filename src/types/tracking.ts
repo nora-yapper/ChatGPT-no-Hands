@@ -22,6 +22,11 @@ export interface TrackingFrame {
   /** 4x4 head transform (column-major, 16 numbers) or null if unavailable */
   headMatrix: number[] | null;
   bbox: BoundingBox | null;
+  /**
+   * Expression-independent head pose (deg), filled in by the pipeline (see signals/stableHeadPose.ts).
+   * When present it takes precedence over headMatrix for the head pointer.
+   */
+  stablePose?: { yaw: number; pitch: number; roll: number; fromMatrix: boolean };
   imageWidth: number;
   imageHeight: number;
   /** provider inference time for this frame */

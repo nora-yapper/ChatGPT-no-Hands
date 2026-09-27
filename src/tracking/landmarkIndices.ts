@@ -1,6 +1,8 @@
 /** Canonical MediaPipe 468/478-point face mesh indices used by the signal layer. */
 export const LM = {
   noseTip: 1,
+  noseLower: 4, // just above the tip, on the midline
+  noseBridge: 168, // between the eyes
   chin: 152,
   forehead: 10,
   leftEyeOuter: 263, // subject's left

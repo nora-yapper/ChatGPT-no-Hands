@@ -5,6 +5,7 @@ import { EventBus } from "@/events/eventBus";
 import { normalizeSignals } from "@/signals/normalizeSignals";
 import { SignalSmoother } from "@/signals/smoothSignals";
 import { computePointer } from "@/signals/pointer";
+import { StableHeadPose } from "@/signals/stableHeadPose";
 import { CalibrationSession, DEFAULT_BASELINE } from "@/signals/calibration";
 import { TrackingQualityEstimator } from "@/quality/trackingQuality";
 import { BlinkDetector } from "@/gestures/blinkDetector";
@@ -38,6 +39,7 @@ export class Pipeline {
   readonly headScroll = new HeadScrollController();
 
   private smoother = new SignalSmoother();
+  private headPose = new StableHeadPose();
   private quality = new TrackingQualityEstimator();
   private detectors: Detector[] = [
     new BlinkDetector(),
@@ -121,6 +123,9 @@ export class Pipeline {
     this.fpsTimes.push(t);
     while (this.fpsTimes.length && this.fpsTimes[0] < t - 1000) this.fpsTimes.shift();
 
+    // head pose that ignores mouth/brow/smile deformation; everything downstream (calibration, pointer) reads it
+    frame = { ...frame, stablePose: this.headPose.update(frame, this.baseline()) ?? undefined };
+
     // calibration capture
     if (this.calibration) {
       this.calibration.addFrame(frame);
@@ -151,6 +156,7 @@ export class Pipeline {
       this.headStep.reset();
       this.grid.reset();
       this.smoother.reset();
+      this.headPose.reset();
       this.quality.reset();
       this.scrollToggle.reset();
       this.headScroll.setActive(false);
@@ -193,7 +199,10 @@ export class Pipeline {
     // head scroll: the configured gesture (settings.scrollToggleGesture) toggles it on/off; while on, head
     // pitch drives whatever scrollable surface the GUI has registered. Entirely independent of focus/confirm
     // — it never touches the FSM.
-    if (this.scrollToggle.observe(frameEvents, t, th, settings.scrollToggleGesture)) {
+    // a gesture bound to an interaction intent (e.g. brows → CONFIRM) can't also toggle scrolling, or one raise would do both
+    const toggleGesture = settings.scrollToggleGesture;
+    const toggleFree = (settings.bindings[toggleGesture as keyof typeof settings.bindings] ?? "NONE") === "NONE";
+    if (toggleFree && this.scrollToggle.observe(frameEvents, t, th, toggleGesture)) {
       const active = this.headScroll.toggle();
       this.bus.emit({ type: "SCROLL_MODE_TOGGLE", timestamp: t, confidence: 1, source: "eyes", metadata: { active, gesture: settings.scrollToggleGesture } });
     }
