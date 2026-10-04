@@ -578,7 +578,7 @@ export default function ChatNoHands() {
             <div className="flex items-center gap-1">
               {!sidebarOpen && <SidebarOpenButton enabled={headEnabled} lastFlash={lastFlash} onActivate={onActivate} />}
               {/* ISNT — Ima Slike Nema Tona */}
-              <div className="px-2.5 text-[18px] font-medium text-foreground">ISNT</div>
+              <div className="px-2.5 pt-1 font-hand text-[32px] leading-none text-foreground">ISNT</div>
             </div>
             <div className="flex items-center gap-2">
               {offline ? (
@@ -618,7 +618,7 @@ export default function ChatNoHands() {
 
           {!hasTranscript && screen === "new" && phase === "starters" && (
             <div className="flex shrink-0 items-end justify-center pb-2 pt-6">
-              <h1 className="text-[28px] font-medium tracking-[-0.01em]">What can I help with?</h1>
+              <h1 className="font-hand text-[44px] leading-none">What can I help with?</h1>
             </div>
           )}
 

@@ -9,7 +9,7 @@ export const ChatTranscript = forwardRef<HTMLDivElement, { messages: ChatMessage
     <div ref={ref} className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
       {empty ? (
         <div className="flex h-full items-center justify-center px-6">
-          <h1 className="text-center text-[28px] font-medium tracking-[-0.01em] text-foreground">What can I help with?</h1>
+          <h1 className="text-center font-hand text-[44px] leading-none text-foreground">What can I help with?</h1>
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-[768px] flex-col gap-6 px-4 pb-8 pt-6">

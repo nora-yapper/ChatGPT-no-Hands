@@ -20,7 +20,7 @@ import { useHeadScrollTarget } from "./useHeadScroll";
 export type InterfaceId = "lab" | "chat";
 
 const INTERFACES: Array<{ id: InterfaceId; label: string; href: string; icon: React.ReactNode }> = [
-  { id: "lab", label: "Input Lab", href: "/", icon: <FlaskConical className="size-5" /> },
+  { id: "lab", label: "Input Lab", href: "/lab", icon: <FlaskConical className="size-5" /> },
   { id: "chat", label: "ISNT", href: "/chat", icon: <MessageSquare className="size-5" /> },
 ];
 

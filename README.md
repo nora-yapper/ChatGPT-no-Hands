@@ -18,8 +18,8 @@ Raw tracker values are never wired to GUI actions. Looking at a button never cli
 The app has two interfaces that share the same camera, signal and interaction pipeline. Switch between them with
 the tab strip in the header:
 
-- **Input Lab** (`/`): the measurement instrument described below — every panel, threshold and event is visible.
-- **ChatGPT No Hands** (`/chat`): a hands-free chat GUI that explores using ChatGPT without typing or voice. The user
+- **Input Lab** (`/lab`): the measurement instrument described below — every panel, threshold and event is visible.
+- **ISNT** (`/chat`, the default view: `/` redirects here): a hands-free chat GUI that explores using ChatGPT without typing or voice. The user
   builds a prompt spatially — **choose → predict → choose** — with the existing Grid Glide head interaction:
 
   1. *Starters.* Ten high-utility first words (What, How, Why, Can, Summarize, Help, Create, Write, Explain, Compare — question words plus task verbs from common prompt-writing terms, see Research & open source) in a
@@ -94,7 +94,7 @@ the tab strip in the header:
 
 ```bash
 npm install     # also copies MediaPipe wasm to public/ and downloads the face model (~4 MB)
-npm run dev     # http://localhost:3000
+npm run dev     # http://localhost:3000 opens ISNT (/chat); the Input Lab is at /lab
 npm test        # vitest: detectors, state machine, calibration, smoothing, focus hit-testing
 ```
 
@@ -205,6 +205,8 @@ Sources and tools this project builds on. Keep this list current when a new one 
 - [shadcn/ui](https://ui.shadcn.com) on [Radix UI](https://www.radix-ui.com), with class-variance-authority, clsx and
   tailwind-merge
 - [Lucide](https://lucide.dev) icons
+- [Just Another Hand](https://fonts.google.com/specimen/Just+Another+Hand) (Google Fonts, via `next/font`, self-hosted at
+  build time) — ISNT's hand-drawn wordmark and the start-screen greeting; identity only, never body or UI text
 - [Zod](https://zod.dev) — validation of model responses
 - [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) — predictions and replies
 - [Vitest](https://vitest.dev), [ESLint](https://eslint.org) — tests and linting
