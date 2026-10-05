@@ -10,8 +10,7 @@
 <p align="center">
   <a href="https://ima-slike-nema-tona.vercel.app"><b>Try the app</b></a> ·
   <a href="https://drive.google.com/file/d/1eP4rHAvrxqSQlSEpNhEpwSYGSFeecTpL/view?usp=sharing"><b>Watch the demo</b></a> ·
-  <a href="https://drive.google.com/file/d/12w3LYaAM4wuwUsN8UUkILTLVuoHm4P--/view?usp=sharing"><b>Read the project deck</b></a> ·
-  <a href="https://www.figma.com/design/3siExxQ7FZAUb53Gbpm9j5/ISNT?node-id=0-1"><b>See it in Figma</b></a>
+  <a href="https://drive.google.com/file/d/12w3LYaAM4wuwUsN8UUkILTLVuoHm4P--/view?usp=sharing"><b>Read the project deck</b></a>
 </p>
 
 ---
