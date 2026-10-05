@@ -1,4 +1,4 @@
-# ChatGPT-no-Hands · INPUT LAB
+# ISNT · INPUT LAB
 
 Alternative ChatGPT GUI controlled through head movement and facial expressions.
 
