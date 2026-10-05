@@ -382,3 +382,177 @@ input[type="range"] {
 .chat-root * {
   scrollbar-color: var(--border) transparent;
 }
+
+/* ───────────────────────────── ISNT launch screen ─────────────────────────────
+   Light by default; follows a saved dark choice via data-isnt-theme, which the inline script in
+   app/chat/layout.tsx sets on <html> before first paint. */
+.isnt-launch {
+  --launch-bg: #ffffff;
+  --launch-fg: #0d0d0d;
+  --launch-dim: #5d5d5d;
+  --launch-halo: rgba(255, 255, 255, 0.85);
+  background: var(--launch-bg);
+  color: var(--launch-fg);
+  transition: opacity var(--isnt-exit-ms) ease;
+}
+html[data-isnt-theme="dark"] .isnt-launch {
+  --launch-bg: #212121;
+  --launch-fg: #ececec;
+  --launch-dim: #b4b4b4;
+  --launch-halo: rgba(33, 33, 33, 0.85);
+}
+.isnt-launch-leave {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* the tube: sized to the asset's aspect, drifting gently once drawn */
+.isnt-launch-tube {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(60vw, 54vh);
+  aspect-ratio: 1841 / 2045;
+  translate: -50% -50%;
+  animation: isnt-tube-in 1.3s cubic-bezier(0.22, 1, 0.36, 1) both, isnt-tube-drift 7s ease-in-out 1.3s infinite;
+}
+.isnt-launch-tube canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes isnt-tube-in {
+  from { transform: scale(0.9) rotate(-6deg); }
+  to { transform: scale(1) rotate(0deg); }
+}
+@keyframes isnt-tube-drift {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  50% { transform: rotate(2.5deg) translateY(-1.5vh); }
+}
+.isnt-launch-leave .isnt-launch-tube {
+  scale: 1.12;
+  transition: scale var(--isnt-exit-ms) cubic-bezier(0.55, 0, 0.75, 0);
+}
+
+/* kinetic type */
+.isnt-launch-type {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.isnt-launch-word {
+  display: flex;
+  font-size: clamp(110px, 19vw, 260px);
+  line-height: 0.8;
+  text-shadow: 0 0 40px var(--launch-halo);
+}
+/* outer span bobs forever; inner span does the entrance — two elements so the transforms don't fight */
+.isnt-letter {
+  display: inline-block;
+  animation: isnt-letter-bob 2.6s ease-in-out infinite;
+  animation-delay: calc(950ms + var(--i) * 130ms);
+}
+.isnt-letter-in {
+  display: inline-block;
+  animation: isnt-letter-in 750ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(100ms + var(--i) * 80ms);
+}
+@keyframes isnt-letter-in {
+  0% { opacity: 0; transform: translateY(70%) rotate(calc(-14deg + var(--i) * 9deg)) scale(0.4); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes isnt-letter-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5%) rotate(calc(-2deg + var(--i) * 1.4deg)); }
+}
+
+/* I · S · N · T unfold into the words they stand for */
+.isnt-launch-expand {
+  display: flex;
+  gap: 0.45em;
+  margin-top: 0.4em;
+  font-size: clamp(17px, 2vw, 26px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 18px var(--launch-halo);
+}
+.isnt-expand-mask {
+  display: inline-block;
+  overflow: hidden;
+  padding: 0.05em 0;
+}
+.isnt-expand-word {
+  display: inline-block;
+  animation: isnt-expand-in 550ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(850ms + var(--i) * 110ms);
+}
+.isnt-expand-word b {
+  font-weight: 700;
+}
+@keyframes isnt-expand-in {
+  from { transform: translateY(110%); }
+  to { transform: none; }
+}
+.isnt-launch-gloss {
+  margin-top: 0.7em;
+  font-size: clamp(12px, 1.05vw, 14px);
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  color: var(--launch-dim);
+  animation: isnt-gloss-in 850ms cubic-bezier(0.22, 1, 0.36, 1) 1.4s both;
+}
+@keyframes isnt-gloss-in {
+  from { opacity: 0; letter-spacing: 0.9em; }
+  to { opacity: 1; letter-spacing: 0.28em; }
+}
+
+/* leaving: letters lift away one after another. This uses the separate translate / opacity properties as
+   transitions, never a new animation — swapping animations would stop the bob and the gloss's letter spacing
+   mid-flight and make the type jump just before it fades. */
+.isnt-letter,
+.isnt-launch-expand,
+.isnt-launch-gloss {
+  transition: translate var(--isnt-exit-ms) cubic-bezier(0.55, 0, 0.75, 0), filter var(--isnt-exit-ms) ease;
+  transition-delay: calc(var(--i, 4) * 35ms);
+}
+.isnt-letter {
+  transition-property: translate, filter, opacity;
+}
+.isnt-launch-leave .isnt-letter,
+.isnt-launch-leave .isnt-launch-expand,
+.isnt-launch-leave .isnt-launch-gloss {
+  translate: 0 -0.35em;
+  filter: blur(6px);
+}
+.isnt-launch-leave .isnt-letter {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .isnt-launch-tube,
+  .isnt-letter,
+  .isnt-letter-in,
+  .isnt-expand-word,
+  .isnt-launch-gloss {
+    animation: none;
+  }
+  .isnt-letter,
+  .isnt-launch-expand,
+  .isnt-launch-gloss {
+    transition: none;
+  }
+  .isnt-launch-leave .isnt-letter,
+  .isnt-launch-leave .isnt-launch-expand,
+  .isnt-launch-leave .isnt-launch-gloss {
+    translate: none;
+    filter: none;
+  }
+  .isnt-launch-leave .isnt-launch-tube {
+    scale: none;
+  }
+}

@@ -30,10 +30,10 @@ import { recents, type RecentChat } from "./recents/recentsStore";
 
 type Theme = "light" | "dark";
 const THEME_KEY = "chat-no-hands-theme";
+/** Light unless the user has switched to dark (ISNT doesn't follow the system setting). */
 function readTheme(): Theme {
   try {
-    const saved = localStorage.getItem(THEME_KEY) as Theme | null;
-    return saved ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    return (localStorage.getItem(THEME_KEY) as Theme | null) ?? "light";
   } catch {
     return "light";
   }
