@@ -1,10 +1,17 @@
 <p align="center">
-  <img src="docs/images/banner.jpg" alt="ISNT: ChatGPT without hands or voice" width="100%">
+  <img src="docs/images/banner.jpg" alt="Meet ISNT: ChatGPT without hands or voice" width="100%">
 </p>
 
 <p align="center">
   <b>A chat app you use with your head and face, not your hands or voice.</b><br>
   <sub>ISNT stands for <i>Ima Slike Nema Tona</i>, Croatian for "picture, but no sound".</sub>
+</p>
+
+<p align="center">
+  <a href="https://ima-slike-nema-tona.vercel.app"><b>Try the app</b></a> ·
+  <a href="https://drive.google.com/file/d/1eP4rHAvrxqSQlSEpNhEpwSYGSFeecTpL/view?usp=sharing"><b>Watch the demo</b></a> ·
+  <a href="https://drive.google.com/file/d/12w3LYaAM4wuwUsN8UUkILTLVuoHm4P--/view?usp=sharing"><b>Read the project deck</b></a> ·
+  <a href="https://www.figma.com/design/3siExxQ7FZAUb53Gbpm9j5/ISNT?node-id=0-1"><b>See it in Figma</b></a>
 </p>
 
 ---
@@ -48,7 +55,7 @@ every press takes three steps:
     <td width="50%"><img src="docs/images/predictions.jpg" alt="Word and phrase predictions"></td>
   </tr>
   <tr>
-    <td><b>Start with a word.</b> Ten common first words, like <i>What</i>, <i>How</i> or <i>Explain</i>.</td>
+    <td><b>Start with a word.</b> Ten common first words, like <i>What</i>, <i>How</i> or <i>Create</i>.</td>
     <td><b>Keep picking.</b> Your text moves to the middle. Phrases appear on the sides, single words in the corners,
     and they refresh after every pick.</td>
   </tr>
@@ -91,7 +98,8 @@ Every person moves differently, so the app adapts to the person instead of the o
   </tr>
 </table>
 
-Chats are saved in **Recents** and can be grouped into projects, and the app has a **dark mode**.
+Chats are saved in **Recents** and can be grouped into projects. ISNT opens in **light mode**, and **dark mode** is
+one switch away.
 
 <table>
   <tr>
@@ -100,6 +108,28 @@ Chats are saved in **Recents** and can be grouped into projects, and the app has
   </tr>
 </table>
 
+## The look
+
+<table>
+  <tr>
+    <td width="45%"><img src="docs/images/launch.gif" alt="The ISNT launch screen: the brand tube draws itself on while ISNT spells out Ima Slike Nema Tona"></td>
+    <td>
+      <b>Every time ISNT opens</b>, the brand tube draws itself on in one stroke. Then ISNT bounces in letter by
+      letter and spells out what it stands for: <b>I</b>ma <b>S</b>like <b>N</b>ema <b>T</b>ona, "picture, but no
+      sound". It holds still long enough to read, then fades into the app.<br><br>
+      <b>The tube</b> comes from original Illustrator artwork: a blend of soft circles in four pastels.<br><br>
+      <b>The wordmark</b> is hand-drawn, set in Just Another Hand. Everything else stays quiet and neutral so the
+      controls are easy to see.
+    </td>
+  </tr>
+</table>
+
+| | Butter | Peach | Rose | Lavender |
+| --- | --- | --- | --- | --- |
+| **Brand tube** | `#fdf7c3` | `#ffdeb4` | `#ffb4b4` | `#b2a4ff` |
+
+Buttons in the app use a wider, softer pastel rainbow, so each position keeps its own colour.
+
 ## Privacy
 
 The camera image **never leaves your browser**. Face tracking runs locally on your computer. Only the text of your
@@ -107,7 +137,9 @@ message is sent to the AI, and with **Offline mode** on, nothing is sent at all.
 
 ## Try it yourself
 
-You need [Node.js](https://nodejs.org) and a computer with a webcam.
+The quickest way is the live version: **[ima-slike-nema-tona.vercel.app](https://ima-slike-nema-tona.vercel.app)**.
+
+To run it on your own computer, you need [Node.js](https://nodejs.org) and a webcam.
 
 ```bash
 git clone https://github.com/nora-yapper/ChatGPT-no-Hands.git
@@ -131,9 +163,9 @@ any button with the mouse to try things out without the camera.
 
 ## Project status
 
-ISNT is a **student design prototype** (Interactive IV, 2026). It has not yet been tested with people who have
-motor or speech disabilities. That is the planned next step, and nothing here should be taken as proof that it
-works for them.
+ISNT is a **student design prototype** (Interactive IV, RIT Croatia, 2026). It has not yet been tested with people
+who have motor or speech disabilities. That is the planned next step, and nothing here should be taken as proof
+that it works for them.
 
 The repository also contains **Input Lab** (at `/lab`), the testing ground used while building ISNT. It shows every
 measurement between the camera and a button press, so gestures and thresholds can be compared.
@@ -141,7 +173,9 @@ measurement between the camera and a button press, so gestures and thresholds ca
 ## For developers
 
 How the tracking pipeline, gesture detectors, layout grid and AI predictions work is described in
-**[docs/TECHNICAL.md](docs/TECHNICAL.md)**.
+**[docs/TECHNICAL.md](docs/TECHNICAL.md)**. The launch screen lives in
+`src/components/ChatNoHands/LaunchScreen.tsx`. Its tube path (`launchTube.ts`) is generated from the Illustrator
+artwork, and it respects the system's reduce-motion setting.
 
 ```bash
 npm test        # unit tests
@@ -181,4 +215,4 @@ The full reference list of the project documentation is in the presentation (sec
 
 ---
 
-<p align="center"><sub>Designed and built by Nora Miskulin · 2026</sub></p>
+<p align="center"><sub>Designed and built by Nora Miskulin · RIT Croatia · 2026</sub></p>
