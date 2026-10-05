@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { BigScreenNotice, useSmallScreen } from "@/components/BigScreenOnly";
 
 // The lab uses webcam + wasm + canvas: client-only.
 const InputLab = dynamic(() => import("@/components/InputLab"), {
@@ -9,5 +10,7 @@ const InputLab = dynamic(() => import("@/components/InputLab"), {
 });
 
 export default function Page() {
-  return <InputLab />;
+  const small = useSmallScreen();
+  if (small) return <BigScreenNotice />;
+  return small === false ? <InputLab /> : null;
 }

@@ -401,6 +401,24 @@ html[data-isnt-theme="dark"] .isnt-launch {
   --launch-dim: #b4b4b4;
   --launch-halo: rgba(33, 33, 33, 0.85);
 }
+/* phones: hidden before first paint (see lib/smallScreen), replaced by the big-screen notice once hydrated */
+html[data-isnt-small] .isnt-launch {
+  display: none;
+}
+.isnt-small-screen {
+  background: #ffffff;
+  color: #0d0d0d;
+}
+.isnt-small-screen-dim {
+  color: #5d5d5d;
+}
+html[data-isnt-theme="dark"] .isnt-small-screen {
+  background: #212121;
+  color: #ececec;
+}
+html[data-isnt-theme="dark"] .isnt-small-screen-dim {
+  color: #b4b4b4;
+}
 .isnt-launch-leave {
   opacity: 0;
   pointer-events: none;

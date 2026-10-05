@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Inter, Just_Another_Hand } from "next/font/google";
 import "./globals.css";
+import { smallScreenScript } from "@/lib/smallScreen";
 
 const sans = Inter({ variable: "--font-sans", subsets: ["latin"] });
 const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
@@ -20,7 +21,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable} ${hand.variable} h-full antialiased`}>
-      <body className="min-h-full bg-lab-bg text-lab-fg" suppressHydrationWarning>{children}</body>
+      <body className="min-h-full bg-lab-bg text-lab-fg" suppressHydrationWarning>
+        <script dangerouslySetInnerHTML={{ __html: smallScreenScript }} />
+        {children}
+      </body>
     </html>
   );
 }
