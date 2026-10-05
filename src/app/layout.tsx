@@ -7,9 +7,14 @@ const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
 /** ISNT's hand-drawn wordmark and headline accents — identity only, never body or UI text */
 const hand = Just_Another_Hand({ variable: "--font-hand", weight: "400", subsets: ["latin"] });
 
+const description =
+  "A ChatGPT-style chat you use with your head and face, not your hands or voice. Works with any laptop webcam; the camera never leaves your browser.";
+
 export const metadata: Metadata = {
   title: "ISNT",
-  description: "Hands-free chat interface controlled through head movement and facial expressions. All camera processing is local.",
+  description,
+  openGraph: { title: "ISNT · ChatGPT without hands or voice", description, siteName: "ISNT", type: "website" },
+  twitter: { card: "summary_large_image", title: "ISNT · ChatGPT without hands or voice", description },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
