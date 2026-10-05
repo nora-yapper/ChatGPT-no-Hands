@@ -30,6 +30,7 @@
   --color-lab-bad: var(--lab-bad);
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-hand: var(--font-hand), cursive;
 }
 
 html {
@@ -207,6 +208,26 @@ input[type="range"] {
   --pastel-fill-8: oklch(0.83 0.13 330);
   --pastel-fill-9: oklch(0.82 0.1 355);
 
+  /* one blue (the profile circle's hue, 255) at four lightness / saturation steps — the Movement groups in
+     ISNT settings. --blue-N is the surface, --blue-fill-N the dwell fill and the level line. */
+  --blue-0: oklch(0.95 0.035 255);
+  --blue-1: oklch(0.895 0.065 255);
+  --blue-2: oklch(0.84 0.095 255);
+  --blue-3: oklch(0.78 0.125 255);
+  --blue-fill-0: oklch(0.85 0.07 255);
+  --blue-fill-1: oklch(0.78 0.1 255);
+  --blue-fill-2: oklch(0.71 0.13 255);
+  --blue-fill-3: oklch(0.63 0.15 255);
+  /* the same steps in the projects card's lavender (hue 295) — the Gestures tab's groups */
+  --purple-0: oklch(0.95 0.035 295);
+  --purple-1: oklch(0.895 0.065 295);
+  --purple-2: oklch(0.84 0.095 295);
+  --purple-3: oklch(0.78 0.125 295);
+  --purple-fill-0: oklch(0.85 0.07 295);
+  --purple-fill-1: oklch(0.78 0.1 295);
+  --purple-fill-2: oklch(0.71 0.13 295);
+  --purple-fill-3: oklch(0.63 0.15 295);
+
   /* solid (primary) controls — Send, Reply, Add, Save: no hue, so they progress by value instead — dark gray
      at rest, filling to black as they arm (see the focusable-surface rules below) */
   --solid-bg: #5d5d5d;
@@ -236,6 +257,23 @@ input[type="range"] {
   --pastel-fill-7: oklch(0.53 0.125 295);
   --pastel-fill-8: oklch(0.55 0.125 330);
   --pastel-fill-9: oklch(0.56 0.13 355);
+
+  --blue-0: oklch(0.27 0.03 255);
+  --blue-1: oklch(0.34 0.06 255);
+  --blue-2: oklch(0.42 0.09 255);
+  --blue-3: oklch(0.5 0.12 255);
+  --blue-fill-0: oklch(0.42 0.06 255);
+  --blue-fill-1: oklch(0.52 0.1 255);
+  --blue-fill-2: oklch(0.61 0.13 255);
+  --blue-fill-3: oklch(0.7 0.14 255);
+  --purple-0: oklch(0.27 0.03 295);
+  --purple-1: oklch(0.34 0.06 295);
+  --purple-2: oklch(0.42 0.09 295);
+  --purple-3: oklch(0.5 0.12 295);
+  --purple-fill-0: oklch(0.42 0.06 295);
+  --purple-fill-1: oklch(0.52 0.1 295);
+  --purple-fill-2: oklch(0.61 0.13 295);
+  --purple-fill-3: oklch(0.7 0.14 295);
 
   /* solid controls are inverted (light) in dark mode: light gray at rest, filling to white as they arm */
   --solid-bg: #b4b4b4;

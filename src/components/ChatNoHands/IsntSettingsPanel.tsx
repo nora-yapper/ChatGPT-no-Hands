@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Check, Cpu, Minus, Move, MoreHorizontal, Palette, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Cpu, Minus, Move, MoreHorizontal, Palette, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import { pipeline } from "@/pipeline/Pipeline";
 import { settingsStore, useSettings } from "@/store/settingsStore";
@@ -26,22 +26,36 @@ import { useHeadScrollTarget } from "./useHeadScroll";
 type Tab = "gestures" | "movement";
 
 /* ── colour: orientation, never louder than the interaction feedback ──
- * Surfaces use the app's pale pastels (`--pastel-N`) and their dwell fill the matching saturated hue
- * (`--pastel-fill-N`), exactly like the compass — so the strongest colour on screen is still an arming fill,
- * and the focus / armed rings, confirm flash and cooldown bar (foreground-coloured) stay on top. Both themes
- * come with the tokens. */
-/** one accent per Movement group */
-const GROUP_TINT: Record<string, number> = { "Pointer movement": 5 /* sky */, "Head range": 4 /* mint */, "Head scroll": 1 /* peach */, Gestures: 7 /* lavender */ };
-/** one hue per gesture, shared by a left/right pair, so the same gesture looks the same wherever it appears */
-const GESTURE_TINT: Record<IsntGesture, number> = {
-  MOUTH_HOLD: 0, // rose
-  BROW_RAISE_BOTH: 2, // butter
-  LONG_BLINK: 6, // periwinkle
-  TURN_LEFT: 3, TURN_RIGHT: 3, // lime
-  TILT_UP: 5, TILT_DOWN: 5, // sky
-  ROLL_LEFT: 8, ROLL_RIGHT: 8, // lilac
-};
-const tintVars = (i: number) => ({ ["--tint" as string]: `var(--pastel-${i})`, ["--fill" as string]: `var(--pastel-fill-${i})` }) as React.CSSProperties;
+ * Related controls share a card; each tab uses one hue at four lightness / saturation steps — the profile blue
+ * for Movement, the projects card's purple for Gestures (`--blue-N` / `--purple-N` and their `-fill-N`, both
+ * themes). A tile's dwell fill is its card's deeper shade, so the strongest colour on screen is still an
+ * arming fill, and the focus / armed rings, confirm flash and cooldown bar (foreground-coloured) stay on top. */
+/** one shade of the profile blue per Movement group (`--blue-N`, lightest to deepest) */
+const GROUP_TINT: Record<string, number> = { "Pointer movement": 1, "Head range": 0, "Head scroll": 2, Gestures: 3 };
+/** the Movement tab's group cards, in grid order (column by column) */
+const MOVEMENT_GROUPS = ["Pointer movement", "Head range", "Head scroll", "Gestures"] as const;
+/** Gestures tab: actions that belong together share a purple card (`--purple-N`, the projects card's hue),
+ * in grid order (column by column) */
+const ACTION_GROUPS: Array<{ name: string; slots: GestureSlot[]; shade: number }> = [
+  { name: "Confirm", slots: ["CONFIRM"], shade: 3 },
+  { name: "Writing", slots: ["BACK", "SEND", "KEYBOARD"], shade: 2 },
+  { name: "Getting around", slots: ["ACCOUNT", "NEW_CHAT"], shade: 1 },
+  { name: "On / off", slots: ["SCROLL_TOGGLE", "INCOGNITO"], shade: 0 },
+];
+/** the gesture chooser: one purple card per kind of gesture — a mirrored pair is the same movement, two directions */
+const GESTURE_FAMILIES: Array<{ name: string; ids: IsntGesture[]; shade: number }> = [
+  { name: "Face gestures", ids: ["MOUTH_HOLD", "BROW_RAISE_BOTH", "LONG_BLINK"], shade: 3 },
+  { name: "Turning", ids: ["TURN_LEFT", "TURN_RIGHT"], shade: 2 },
+  { name: "Tilting", ids: ["TILT_UP", "TILT_DOWN"], shade: 1 },
+  { name: "Head to a shoulder", ids: ["ROLL_LEFT", "ROLL_RIGHT"], shade: 0 },
+];
+/** a tile's surface and dwell fill: a blue tile on a white row (Movement), or a white tile on a purple card (Gestures) */
+type Shade = { tint: string; fill: string };
+const blue = (i: number): Shade => ({ tint: `var(--blue-${i})`, fill: `var(--blue-fill-${i})` });
+const onPurple = (i: number): Shade => ({ tint: "var(--background)", fill: `var(--purple-fill-${i})` });
+
+/** a gesture change waiting for the user to confirm it — nothing changes until they do */
+type Pending = { kind: "pick"; slot: GestureSlot; gesture: IsntGesture | null } | { kind: "preset"; id: string };
 
 type MoreView = "menu" | "legend" | "tech" | "advanced";
 const MORE_PAGES: Record<Exclude<MoreView, "menu">, { title: string; icon: React.ReactNode }> = {
@@ -52,9 +66,7 @@ const MORE_PAGES: Record<Exclude<MoreView, "menu">, { title: string; icon: React
 
 /**
  * What the colours on the settings screen mean — read-only, drawn from the same maps the screen uses. Colours
- * mark *groups*, not individual items, so the legend says why things share one: every setting in a group
- * shares its colour, and a mirrored pair of head movements (left / right, up / down, either shoulder) shares
- * one because it's the same movement in two directions.
+ * mark *groups*, not individual items: everything on one card belongs together.
  */
 function ColorLegend() {
   const swatch = (bg: string, key?: string) => <span key={key} aria-hidden className="mt-px size-4 shrink-0 rounded-[5px] ring-1 ring-inset ring-foreground/10" style={{ background: bg }} />;
@@ -67,22 +79,20 @@ function ColorLegend() {
     <div className="grid h-full grid-cols-2 gap-x-6 overflow-hidden px-2 leading-snug" style={{ fontSize: "clamp(10.5px, 1.6vh, 12.5px)" }}>
       <section className="flex flex-col gap-2">
         {heading("Movement tab")}
-        {note("Settings that work together share a colour.")}
+        {note("Settings that work together share a shade of blue.")}
         <ul className="flex flex-col gap-[clamp(2px,0.7vh,6px)]">
-          {Object.entries(GROUP_TINT).map(([group, i]) => row(`var(--pastel-${i})`, group))}
+          {Object.entries(GROUP_TINT).map(([group, i]) => row(`var(--blue-${i})`, group))}
         </ul>
       </section>
       <section className="flex flex-col gap-2">
         {heading("Gestures tab")}
-        {note("Tiles take their gesture's colour. Mirrored head movements share one: same movement, two directions.")}
+        {note("Shortcuts that belong together share a shade of purple.")}
         <ul className="flex flex-col gap-[clamp(2px,0.7vh,6px)]">
-          <li className="flex items-start gap-2">
-            <span className="flex shrink-0 gap-0.5">{(["MOUTH_HOLD", "BROW_RAISE_BOTH", "LONG_BLINK"] as const).map((g) => swatch(`var(--pastel-${GESTURE_TINT[g]})`, g))}</span>
-            <span className="min-w-0 font-medium">Face gestures</span>
-          </li>
-          {row(`var(--pastel-${GESTURE_TINT.TURN_LEFT})`, "Turning")}
-          {row(`var(--pastel-${GESTURE_TINT.TILT_UP})`, "Tilting")}
-          {row(`var(--pastel-${GESTURE_TINT.ROLL_LEFT})`, "Head to a shoulder")}
+          {ACTION_GROUPS.map((g) => row(`var(--purple-${g.shade})`, g.name))}
+        </ul>
+        {heading("Choosing a gesture")}
+        <ul className="flex flex-col gap-[clamp(2px,0.7vh,6px)]">
+          {GESTURE_FAMILIES.map((f) => row(`var(--purple-${f.shade})`, f.name))}
         </ul>
       </section>
     </div>
@@ -131,6 +141,36 @@ function AdvancedTable({ active }: { active: boolean }) {
 }
 
 
+/** what a pending gesture change will do, in words — the confirmation's body */
+function ChangeSummary({ pending, isnt }: { pending: Pending; isnt: IsntSettings }) {
+  let title: string, from: string | null = null, to: string, notes: string[] = [];
+  if (pending.kind === "preset") {
+    const p = PRESETS.find((x) => x.id === pending.id)!;
+    title = "Apply this preset?";
+    to = `Preset: ${p.label}`;
+    notes = [p.explain, "It replaces all your current gesture choices."];
+    if (p.confirm !== isnt.confirm) notes.push("You'll have 20 s to confirm something with the new gesture, or it switches back.");
+  } else {
+    const { slot, gesture } = pending;
+    const moved = assign(isnt, slot, gesture, 0).moved;
+    title = `Change the gesture for “${actionLabel(slot)}”?`;
+    from = gestureOf(isnt, slot) ? gestureLabel(gestureOf(isnt, slot)) : "No gesture";
+    to = gesture ? gestureLabel(gesture) : "No gesture";
+    if (moved) notes.push(`“${actionLabel(moved)}” will then have no gesture.`);
+    if (slot === "CONFIRM") notes.push("You'll have 20 s to confirm something with it, or it switches back.");
+  }
+  return (
+    <div className="flex min-h-0 flex-col items-center justify-center gap-3 overflow-hidden px-4 text-center">
+      <div className="text-[15px] font-medium">{title}</div>
+      <div className="flex flex-wrap items-center justify-center gap-2 text-[16px]">
+        {from && <><span className="rounded-xl bg-muted px-3 py-1.5 text-muted-foreground">{from}</span><ArrowRight className="size-5 text-muted-foreground" aria-label="to" /></>}
+        <span className="rounded-xl px-3 py-1.5 font-semibold" style={{ background: "var(--purple-1)" }}>{to}</span>
+      </div>
+      {notes.length > 0 && <div className="flex flex-col gap-0.5 text-[13px] text-muted-foreground">{notes.map((n) => <p key={n}>{n}</p>)}</div>}
+    </div>
+  );
+}
+
 const t = (id: string, label: string, action: string, payload?: Record<string, unknown>): FocusTarget => ({ id: `is-${id}`, kind: "button", label, action, payload });
 
 /** plain-language explanations, keyed by target id, for the strip */
@@ -143,6 +183,8 @@ function explanations(s: IsntSettings, slot: GestureSlot | null): Record<string,
     "is-reset": "Put every movement setting back to its default. Your gestures stay as they are.",
     "is-pick-none": "Remove this shortcut's gesture.",
     "is-close": "Close without changing anything.",
+    "is-apply": "Make this change.",
+    "is-cancel": "Keep things as they are.",
     "is-more": "More: what the colours on this screen mean, technical details, and what each control changes underneath.",
     "is-more-legend": "Colour legend: what each colour on this screen stands for.",
     "is-more-tech": "Technicalities: how ISNT works, stage by stage, the research it's based on and the open-source tools it uses.",
@@ -225,6 +267,8 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
   const [hover, setHover] = useState<string | null>(null);
   /** a one-off note after a change (e.g. a gesture moved from another action) */
   const [notice, setNotice] = useState<string | null>(null);
+  /** a picked gesture or preset, shown for confirmation before it's applied (no accidental switching) */
+  const [pending, setPending] = useState<Pending | null>(null);
 
   const update = (next: IsntSettings) => settingsStore.set({ isnt: next });
 
@@ -232,27 +276,32 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
     const p = target?.payload ?? {};
     const s = settingsStore.get().isnt;
     switch (action) {
-      case "IS_TAB": setTab(p.tab as Tab); setSlot(null); setMore(null); setNotice(null); break;
+      case "IS_TAB": setTab(p.tab as Tab); setSlot(null); setMore(null); setPending(null); setNotice(null); break;
       case "IS_MORE": setMore((m) => (m ? null : "menu")); setSlot(null); break;
       case "IS_MORE_VIEW": if (p.view === "advanced" || p.view === "tech") { setMore(null); setFullPage(p.view); } else setMore(p.view as MoreView); break;
       case "IS_ADV_BACK": setFullPage(null); setMore("menu"); break;
       case "IS_ADV_CLOSE": setFullPage(null); break;
       case "IS_MORE_CLOSE": setMore(null); break;
       case "IS_SLOT": setSlot(p.slot as GestureSlot); setNotice(null); break;
-      case "IS_CLOSE": setSlot(null); break;
-      case "IS_PICK": {
+      case "IS_CLOSE": setSlot(null); setPending(null); break;
+      // picking a gesture or a preset only asks; IS_APPLY (the confirmation's "Change") makes the change
+      case "IS_PICK": setPending({ kind: "pick", slot: p.slot as GestureSlot, gesture: (p.gesture as IsntGesture | null) ?? null }); break;
+      case "IS_PRESET": setPending({ kind: "preset", id: p.id as string }); break;
+      case "IS_CANCEL": setPending(null); break;
+      case "IS_APPLY": {
+        setPending(null);
+        if (p.kind === "preset") {
+          const next = applyPreset(s, p.id as string, Date.now());
+          update(next);
+          setNotice(next.confirmTrial && next.confirm !== s.confirm ? trialNotice(next.confirm) : PRESET_NOTICE);
+          break;
+        }
         const sl = p.slot as GestureSlot;
         const r = assign(s, sl, (p.gesture as IsntGesture | null) ?? null, Date.now());
         if (!r.ok) break;
         update(r.settings);
         setNotice(sl === "CONFIRM" && r.settings.confirmTrial ? trialNotice(r.settings.confirm) : r.moved ? movedNotice(p.gesture as IsntGesture, r.moved) : null);
         setSlot(null);
-        break;
-      }
-      case "IS_PRESET": {
-        const next = applyPreset(s, p.id as string, Date.now());
-        update(next);
-        setNotice(next.confirmTrial && next.confirm !== s.confirm ? trialNotice(next.confirm) : PRESET_NOTICE);
         break;
       }
       case "IS_STEP": {
@@ -275,7 +324,7 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
     fire();
     const id = setTimeout(fire, 250);
     return () => clearTimeout(id);
-  }, [tab, slot, more, advanced]);
+  }, [tab, slot, more, advanced, pending]);
 
   // a notice (e.g. "moved from …") shows for a while, then the strip goes back to explaining what's pointed at
   useEffect(() => {
@@ -310,30 +359,33 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
   const cardText = (id: LevelId | null) => { const l = id && LEVELS.find((x) => x.id === id); return l ? `${l.label}: ${l.explain}` : null; };
   const pointed = (hover && (ex[hover] ?? cardText(hover.replace(/^card-/, "") as LevelId))) || (focusId && ex[focusId]) || cardText(underCard) || null;
   /** `covered`: sits under the open chooser — rendered, but not a head target (like Recents under its menu) */
-  /** `tint`: a pastel index — the tile takes that pastel as its surface and its hue for the dwell fill. A disabled
-   * tile fades as a whole (surface included), except the current choice, which stays readable. */
-  const tile = (target: FocusTarget, content: React.ReactNode, opts: { active?: boolean; disabled?: boolean; covered?: boolean; className?: string; variant?: "secondary" | "ghost"; tint?: number } = {}) => (
+  /** `shade`: the tile's surface and its dwell fill. A disabled tile fades as a whole (surface included), except
+   * the current choice, which stays readable. */
+  const tile = (target: FocusTarget, content: React.ReactNode, opts: { active?: boolean; disabled?: boolean; covered?: boolean; className?: string; variant?: "default" | "secondary" | "ghost"; shade?: Shade } = {}) => {
+    const tinted = !!opts.shade;
+    return (
     <ChatFocusable
       key={target.id}
       target={target}
       enabled={enabled && !opts.disabled && !opts.covered}
       flashKey={lastFlash[target.id]}
       radius="rounded-2xl"
-      className={cn(opts.tint !== undefined && "pastel", opts.disabled && !opts.active && "opacity-40")}
-      style={opts.tint !== undefined ? tintVars(opts.tint) : undefined}
+      className={cn(tinted && "pastel", opts.disabled && !opts.active && "opacity-40")}
+      style={opts.shade ? ({ ["--tint" as string]: opts.shade.tint, ["--fill" as string]: opts.shade.fill } as React.CSSProperties) : undefined}
       onActivate={opts.disabled ? undefined : activate}
     >
       <Button
-        variant={opts.tint !== undefined ? "ghost" : opts.variant ?? "secondary"}
+        variant={tinted ? "ghost" : opts.variant ?? "secondary"}
         disabled={opts.disabled}
         onMouseEnter={() => setHover(target.id)}
         onMouseLeave={() => setHover((h) => (h === target.id ? null : h))}
-        className={cn("h-full w-full whitespace-normal rounded-2xl px-4 text-[15px] font-normal leading-snug disabled:opacity-100", opts.tint !== undefined && "hover:bg-transparent", opts.active && "ring-2 ring-inset ring-foreground/60" /* inset: the focusable wrapper clips anything outside */, opts.className)}
+        className={cn("h-full w-full whitespace-normal rounded-2xl px-4 text-[15px] font-normal leading-snug disabled:opacity-100", tinted && "hover:bg-transparent", opts.active && "ring-2 ring-inset ring-foreground/60" /* inset: the focusable wrapper clips anything outside */, opts.className)}
       >
         {content}
       </Button>
     </ChatFocusable>
-  );
+    );
+  };
 
   /** Gestures | Movement: styled like the New chat / Recents / Account tabs — the selected one a darker grey
    * (bg-accent), the others hairline-bordered with muted text; no outline */
@@ -356,7 +408,7 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
   };
 
   /** a popup (gesture chooser or More) covers the tab body: what's under it isn't a head target */
-  const overlay = !!slot || !!more || advanced;
+  const overlay = !!slot || !!more || advanced || !!pending;
 
   // on the page background, not bg-card: in dark mode the card surface is the same colour as the secondary
   // tiles (#2f2f2f), which would make every tile invisible
@@ -369,52 +421,73 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
 
       <div className="relative min-h-0 flex-1">
         {tab === "gestures" ? (
-          <div className="grid h-full gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: "repeat(5, minmax(0, 1fr))" }}>
-            {ACTIONS.map((a) => {
-              const g = gestureOf(isnt, a.id);
-              return tile(
-                t(`slot-${a.id}`, `Gesture for ${a.label}`, "IS_SLOT", { slot: a.id }),
-                <span className="flex w-full flex-col items-start gap-0.5 text-left">
-                  <span className={cn("text-xs", a.id === "CONFIRM" ? "font-semibold uppercase tracking-[0.08em]" : "opacity-70")}>{a.label}</span>
-                  <span className={cn("text-[16px] font-medium", !g && "text-muted-foreground")}>{g ? gestureLabel(g) : "No gesture"}</span>
-                </span>,
-                { active: slot === a.id, covered: overlay, tint: g ? GESTURE_TINT[g] : undefined },
-              );
-            })}
-            {PRESETS.map((p) => tile(t(`preset-${p.id}`, `Preset: ${p.label}`, "IS_PRESET", { id: p.id }), <span className="flex items-center gap-2"><Check className="size-4" /> Preset: {p.label}</span>, { variant: "ghost", covered: overlay, className: "border border-dashed border-border" }))}
+          // the same card layout as Movement, in purple: Confirm + Writing + a preset left, Getting around +
+          // On / off + a preset right
+          <div className="grid h-full grid-flow-col gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: "repeat(5, minmax(0, 1fr))" }}>
+            {ACTION_GROUPS.flatMap((group, gi) => [
+              <section key={group.name} aria-label={group.name} className="grid min-h-0 gap-1.5 rounded-[20px] p-1.5" style={{ gridRow: `span ${group.slots.length}`, gridTemplateRows: `repeat(${group.slots.length}, minmax(0, 1fr))`, background: `var(--purple-${group.shade})` }}>
+                {group.slots.map((id) => {
+                  const a = ACTIONS.find((x) => x.id === id)!;
+                  const g = gestureOf(isnt, id);
+                  return tile(
+                    t(`slot-${id}`, `Gesture for ${a.label}`, "IS_SLOT", { slot: id }),
+                    <span className="flex w-full flex-col items-start gap-0.5 text-left">
+                      <span className={cn("text-xs", id === "CONFIRM" ? "font-semibold uppercase tracking-[0.08em]" : "opacity-70")}>{a.label}</span>
+                      <span className={cn("text-[16px] font-medium", !g && "text-muted-foreground")}>{g ? gestureLabel(g) : "No gesture"}</span>
+                    </span>,
+                    { active: slot === id, covered: overlay, shade: onPurple(group.shade) },
+                  );
+                })}
+              </section>,
+              // a preset closes each column
+              ...(gi === 1 || gi === 3 ? [PRESETS[gi === 1 ? 0 : 1]].map((p) => tile(t(`preset-${p.id}`, `Preset: ${p.label}`, "IS_PRESET", { id: p.id }), <span className="flex items-center gap-2"><Check className="size-4" /> Preset: {p.label}</span>, { variant: "ghost", covered: overlay, className: "border border-dashed border-border" })) : []),
+            ])}
           </div>
         ) : (
-          <div className="grid h-full gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: "repeat(5, minmax(0, 1fr))" }}>
-            {LEVELS.map((l) => {
-              const i = isnt.levels[l.id];
+          // related settings share one blue card (a shade per group); the 5-row grid keeps every row the same
+          // height across both columns: Pointer movement + Head range left, Head scroll + Gestures + Reset right
+          <div className="grid h-full grid-flow-col gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: "repeat(5, minmax(0, 1fr))" }}>
+            {MOVEMENT_GROUPS.map((group) => {
+              const levels = LEVELS.filter((l) => l.group === group);
+              const flips = group === "Head range";
+              const rows = levels.length + (flips ? 1 : 0);
               return (
-                // the card itself isn't clickable (only − / + are), so it gets a static highlight, never the arming fill
-                <div
-                  key={l.id}
-                  ref={(el) => { if (el) cardRefs.current.set(l.id, el); else cardRefs.current.delete(l.id); }}
-                  onMouseEnter={() => setHover(`card-${l.id}`)}
-                  onMouseLeave={() => setHover((h) => (h === `card-${l.id}` ? null : h))}
-                  className={cn("flex min-h-0 items-center gap-2 rounded-2xl border py-1.5 pl-4 pr-1.5 transition-colors duration-150", cardActive(l.id) ? "border-foreground/45 bg-foreground/[0.035] ring-1 ring-foreground/45" : "border-border")}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[11px] uppercase tracking-[0.1em] text-muted-foreground">{l.group}</div>
-                    <div className="truncate text-[15px]">{l.label}</div>
-                    <div className="flex items-center gap-1.5">
-                      <span key={changed[l.id] ?? 0} className={cn("inline-block px-0.5 text-[15px] font-semibold tabular-nums", changed[l.id] && "isnt-value-pop")}>{l.display[i]}</span>
-                      <span className="flex gap-0.5" aria-hidden>{l.display.map((_, k) => <span key={k} className="h-1.5 w-2.5 rounded-full ring-1 ring-inset ring-foreground/10" style={{ background: k <= i ? `var(--pastel-fill-${GROUP_TINT[l.group]})` : `var(--pastel-${GROUP_TINT[l.group]})` }} />)}</span>
+                <section key={group} aria-label={group} className="grid min-h-0 gap-1.5 rounded-[20px] p-1.5" style={{ gridRow: `span ${rows}`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, background: `var(--blue-${GROUP_TINT[group]})` }}>
+                  {levels.map((l) => {
+                    const i = isnt.levels[l.id];
+                    return (
+                      // the row itself isn't clickable (only − / + are), so it gets a static highlight, never the arming fill
+                      <div
+                        key={l.id}
+                        ref={(el) => { if (el) cardRefs.current.set(l.id, el); else cardRefs.current.delete(l.id); }}
+                        onMouseEnter={() => setHover(`card-${l.id}`)}
+                        onMouseLeave={() => setHover((h) => (h === `card-${l.id}` ? null : h))}
+                        className={cn("flex min-h-0 items-stretch gap-2 rounded-[14px] bg-background p-1.5 transition-shadow duration-150", cardActive(l.id) && "ring-2 ring-foreground/45")}
+                      >
+                        {/* − | name, value, level | + */}
+                        <div className="grid w-14 shrink-0">
+                          {tile(t(`step-${l.id}-down`, `${l.label}: less`, "IS_STEP", { id: l.id, delta: -1 }), <Minus className="size-5" />, { disabled: i === 0, covered: overlay, className: "px-0", shade: blue(GROUP_TINT[group]) })}
+                        </div>
+                        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 text-center">
+                          <div className="max-w-full truncate text-[15px]">{l.label}</div>
+                          <span key={changed[l.id] ?? 0} className={cn("inline-block px-0.5 text-[15px] font-semibold tabular-nums", changed[l.id] && "isnt-value-pop")}>{l.display[i]}</span>
+                          <span className="flex gap-1" aria-hidden>{l.display.map((_, k) => <span key={k} className="h-[3px] w-3.5 rounded-full" style={{ background: k <= i ? `var(--blue-fill-${GROUP_TINT[group]})` : "color-mix(in oklch, var(--foreground) 10%, transparent)" }} />)}</span>
+                        </div>
+                        <div className="grid w-14 shrink-0">
+                          {tile(t(`step-${l.id}-up`, `${l.label}: more`, "IS_STEP", { id: l.id, delta: 1 }), <Plus className="size-5" />, { disabled: i === l.display.length - 1, covered: overlay, className: "px-0", shade: blue(GROUP_TINT[group]) })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {flips && (
+                    <div className="grid min-h-0 grid-cols-2 gap-1.5 rounded-[14px] bg-background p-1.5">
+                      {tile(t("flip-x", "Flip left / right", "IS_FLIP", { axis: "x" }), <span className="flex flex-col"><span className="text-xs opacity-70">Flip left/right</span>{isnt.flipX ? "On" : "Off"}</span>, { active: isnt.flipX, covered: overlay, className: "px-2", shade: blue(GROUP_TINT[group]) })}
+                      {tile(t("flip-y", "Flip up / down", "IS_FLIP", { axis: "y" }), <span className="flex flex-col"><span className="text-xs opacity-70">Flip up/down</span>{isnt.flipY ? "On" : "Off"}</span>, { active: isnt.flipY, covered: overlay, className: "px-2", shade: blue(GROUP_TINT[group]) })}
                     </div>
-                  </div>
-                  <div className="grid h-full w-[7.5rem] shrink-0 grid-cols-2 gap-1.5">
-                    {tile(t(`step-${l.id}-down`, `${l.label}: less`, "IS_STEP", { id: l.id, delta: -1 }), <Minus className="size-5" />, { disabled: i === 0, covered: overlay, className: "px-0", tint: GROUP_TINT[l.group] })}
-                    {tile(t(`step-${l.id}-up`, `${l.label}: more`, "IS_STEP", { id: l.id, delta: 1 }), <Plus className="size-5" />, { disabled: i === l.display.length - 1, covered: overlay, className: "px-0", tint: GROUP_TINT[l.group] })}
-                  </div>
-                </div>
+                  )}
+                </section>
               );
             })}
-            <div className="grid min-h-0 grid-cols-2 gap-2">
-              {tile(t("flip-x", "Flip left / right", "IS_FLIP", { axis: "x" }), <span className="flex flex-col"><span className="text-xs text-muted-foreground">Flip left/right</span>{isnt.flipX ? "On" : "Off"}</span>, { active: isnt.flipX, covered: overlay, className: "px-2" })}
-              {tile(t("flip-y", "Flip up / down", "IS_FLIP", { axis: "y" }), <span className="flex flex-col"><span className="text-xs text-muted-foreground">Flip up/down</span>{isnt.flipY ? "On" : "Off"}</span>, { active: isnt.flipY, covered: overlay, className: "px-2" })}
-            </div>
             {tile(t("reset", "Reset movement settings", "IS_RESET"), <span className="flex items-center gap-2"><RotateCcw className="size-5" /> Reset to defaults</span>, { variant: "ghost", covered: overlay, className: "border border-dashed border-border" })}
           </div>
         )}
@@ -422,20 +495,37 @@ export function IsntSettingsPanel({ enabled, lastFlash, onActivate, style, advan
         {slot && (
           <div className="absolute inset-0 z-[5] flex flex-col gap-2 rounded-2xl border border-border bg-background p-3 shadow-[0_8px_32px_rgba(0,0,0,0.16)] animate-in fade-in zoom-in-95 duration-200" role="dialog" aria-label={`Gesture for ${ACTIONS.find((a) => a.id === slot)!.label}`}>
             <div className="px-1 text-xs font-medium text-muted-foreground">Gesture for “{ACTIONS.find((a) => a.id === slot)!.label}”</div>
-            <div className="grid min-h-0 flex-1 gap-2" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gridTemplateRows: "repeat(4, minmax(0, 1fr))" }}>
-              {GESTURES.map((g) => {
-                const current = gestureOf(isnt, slot) === g.id;
-                const blocked = blockedReason(isnt, slot, g.id);
-                const usedBy = slotOf(isnt, g.id);
-                const note = current ? "Current" : blocked ? (slot === "CONFIRM" ? "Can't confirm" : "Used to confirm") : usedBy ? `Now: ${ACTIONS.find((a) => a.id === usedBy)!.label}` : null;
-                return tile(
-                  t(`pick-${g.id}`, g.label, "IS_PICK", { slot, gesture: g.id }),
-                  <span className="flex flex-col items-center gap-0.5"><span>{g.label}</span>{note && <span className="text-[11px] opacity-70">{note}</span>}</span>,
-                  { active: current, disabled: !!blocked || current, className: "px-2", tint: GESTURE_TINT[g.id] },
-                );
-              })}
-              {slot !== "CONFIRM" && tile(t("pick-none", "No gesture", "IS_PICK", { slot, gesture: null }), "No gesture", { variant: "ghost", disabled: !gestureOf(isnt, slot), className: "border border-dashed border-border" })}
-              {tile(t("close", "Close", "IS_CLOSE"), <span className="flex items-center gap-1.5 text-muted-foreground"><X className="size-5" /> Close</span>, { variant: "ghost" })}
+            <div className="grid min-h-0 flex-1 gap-2" style={{ gridTemplateRows: `repeat(${GESTURE_FAMILIES.length + 1}, minmax(0, 1fr))` }}>
+              {GESTURE_FAMILIES.map((f) => (
+                <section key={f.name} aria-label={f.name} className="grid min-h-0 gap-1.5 rounded-[18px] p-1.5" style={{ gridTemplateColumns: `repeat(${f.ids.length}, minmax(0, 1fr))`, background: `var(--purple-${f.shade})` }}>
+                  {f.ids.map((id) => {
+                    const g = GESTURES.find((x) => x.id === id)!;
+                    const current = gestureOf(isnt, slot) === id;
+                    const blocked = blockedReason(isnt, slot, id);
+                    const usedBy = slotOf(isnt, id);
+                    const note = current ? "Current" : blocked ? (slot === "CONFIRM" ? "Can't confirm" : "Used to confirm") : usedBy ? `Now: ${ACTIONS.find((a) => a.id === usedBy)!.label}` : null;
+                    return tile(
+                      t(`pick-${id}`, g.label, "IS_PICK", { slot, gesture: id }),
+                      <span className="flex flex-col items-center gap-0.5"><span>{g.label}</span>{note && <span className="text-[11px] opacity-70">{note}</span>}</span>,
+                      { active: current, disabled: !!blocked || current, covered: !!pending, className: "px-2", shade: onPurple(f.shade) },
+                    );
+                  })}
+                </section>
+              ))}
+              <div className="grid min-h-0 grid-flow-col gap-2" style={{ gridAutoColumns: "minmax(0, 1fr)" }}>
+                {slot !== "CONFIRM" && tile(t("pick-none", "No gesture", "IS_PICK", { slot, gesture: null }), "No gesture", { variant: "ghost", disabled: !gestureOf(isnt, slot), covered: !!pending, className: "border border-dashed border-border" })}
+                {tile(t("close", "Close", "IS_CLOSE"), <span className="flex items-center gap-1.5 text-muted-foreground"><X className="size-5" /> Close</span>, { variant: "ghost", covered: !!pending })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pending && (
+          <div className="absolute inset-0 z-[6] grid gap-3 rounded-2xl border border-border bg-background p-3 shadow-[0_8px_32px_rgba(0,0,0,0.16)] animate-in fade-in zoom-in-95 duration-200" style={{ gridTemplateRows: "minmax(0, 1.2fr) minmax(0, 1fr)" }} role="alertdialog" aria-label="Confirm change">
+            <ChangeSummary pending={pending} isnt={isnt} />
+            <div className="grid min-h-0 grid-cols-2 gap-3">
+              {tile(t("cancel", "Cancel", "IS_CANCEL"), <span className="flex items-center gap-2"><X className="size-5" /> Cancel</span>, { variant: "ghost", className: "border border-dashed border-border" })}
+              {tile(t("apply", "Change", "IS_APPLY", pending), <span className="flex items-center gap-2 font-medium"><Check className="size-5" /> Change</span>, { variant: "default" })}
             </div>
           </div>
         )}
